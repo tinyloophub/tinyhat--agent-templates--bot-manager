@@ -6,8 +6,6 @@ is_platform: true
 toolkits:
   - bot-manager-20260427
   - outbound-20260427
-api_scope:
-  - channel:telegram:send
 skills:
   - name: reply-via-telegram
     source: local
@@ -56,9 +54,8 @@ This is the manifest for the `@tinyhatbot` manager hat.
 
 The frontmatter above is the machine-readable part — it's what
 `skill_loader_service` (and, eventually, the manifest resolver) reads
-to decide which skills to mount and what API scopes the agent token
-should carry. Everything below the frontmatter is prose for the
-maintainer.
+to decide which skills and function toolkits to mount. Everything
+below the frontmatter is prose for the maintainer.
 
 ## Skills
 
@@ -132,17 +129,6 @@ When more capabilities land (greet, help, register-skill, …),
 prefer adding them as **function tools in the toolkit** rather than
 in-sandbox skills — the function-tool path is the post-#68 default
 because it doesn't depend on the sandbox proxy being healthy.
-
-## API scope
-
-`api_scope` is what the agent token carries for manager-bot runs:
-enough to send one Telegram reply via the platform proxy
-(`channel:telegram:send`). It intentionally does NOT include
-`conversation:history:read` anymore — older history is read by the
-`read_older_history` function tool, which runs in our backend with
-direct DB access and doesn't need a token-side scope. Vault reads
-are also out of scope; the manager bot talks to channel proxies,
-not directly to vault secrets.
 
 ## Why `HAT.md`, not `HAT.yaml`
 

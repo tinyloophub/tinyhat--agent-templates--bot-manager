@@ -21,8 +21,7 @@ which the OpenAI org allowlist also includes, and one definitely-
 unrelated host as a control).
 
 ```sh
-. /home/oai/skills/session-context-*/scripts/env.sh \
-  && {
+{
        echo "=== probe-network v2 ==="
        echo "--- proxy env vars ---"
        echo "HTTP_PROXY=${HTTP_PROXY:-<unset>}"
@@ -43,7 +42,6 @@ unrelated host as a control).
        echo "uname=$(uname -a 2>&1)"
        echo "container_id=$(hostname 2>&1)"
        echo "agents_sdk=${OPENAI_AGENTS_SDK_VERSION:-<unset>}"
-       echo "platform=${TINYLOOP_API_BASE_URL:-<unset>}"
        echo "--- DNS reachability ---"
        for srv in 8.8.8.8 1.1.1.1 169.254.169.254; do
          echo -n "ping ${srv}: "
@@ -52,7 +50,6 @@ unrelated host as a control).
        done
        echo "--- per-host probes ---"
        for url in \
-         "$TINYLOOP_API_BASE_URL/" \
          "https://api.tinyloop.co/" \
          "https://github.com/" \
          "https://api.github.com/" \
@@ -76,7 +73,7 @@ unrelated host as a control).
          echo " exit=$?"
        done
        echo "=== end probe-network v2 ==="
-     }
+}
 ```
 
 ## What to put in your final assistant message

@@ -16,7 +16,7 @@ on GitHub, because it is.
 ## Layout
 
 ```text
-HAT.md                   # manifest: toolkits, skills, api scope
+HAT.md                   # manifest: toolkits and skills
 SOUL.md                  # identity prose the agent reads as system context
 README.md                # this file
 skills/

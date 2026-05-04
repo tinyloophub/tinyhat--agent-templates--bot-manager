@@ -15,6 +15,10 @@ the right Bearer header for you from the bot-manager's vault. You
 do **not** need an API key in your message, and you must **never**
 ask the user for one.
 
+You also do not need a platform base URL or sandbox bearer token.
+For first-party Tinyhat calls, pass a relative `/hapi/v1/...` path;
+the backend function tool resolves the platform host server-side.
+
 The only callable surface is **`/hapi/v1/`** (the agent-centric
 platform API shipped in #155 / W-REVISE). Do not call any other
 path prefix. If a capability you need isn't here yet, say so to
@@ -33,7 +37,7 @@ Every call goes through one tool, with one shape:
 ```text
 gated_api_call(
   method   = "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
-  url      = "https://<platform-host>/hapi/v1/<path>",
+  url      = "/hapi/v1/<path>",
   json_body= { … } | null,    # only for POST / PATCH / PUT
   query    = { … } | null,    # for GET filters or paging
 )

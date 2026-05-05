@@ -15,10 +15,21 @@ edit ships, a workflow gets sharpened — the running fork stays at
 its old pinned commit until someone fast-forwards it.
 
 This skill is the **chat-driven** version of that fast-forward.
-The user says "sync yourself" / "update from upstream" / "pick up
-the new version", and the skill resolves the target agent, reads
-the upstream-status delta, mirrors the change in plain language,
-asks for an explicit yes, and then runs the sync.
+Plain-language triggers all map onto the same flow:
+
+- "sync yourself" / "sync acme-helper"
+- "upgrade" / "upgrade yourself" / "upgrade acme-helper"
+- "update from upstream" / "update yourself"
+- "pick up the new version" / "pull the latest version"
+- "fast-forward yourself" / "advance to upstream HEAD"
+
+For any of those, resolve the target agent, read the
+upstream-status delta, mirror the change in plain language, ask
+for an explicit yes, and then run the sync. "Upgrade" is the same
+operation as "sync" here — the platform only ships fast-forward
+syncs (see "What 'fast-forward' means" below), so an "upgrade"
+request is never a different mutation; it just lands the new
+template content the user is asking for.
 
 The platform endpoints this skill calls are documented in
 [`tinyhat-platform-api-reference`](../tinyhat-platform-api-reference/SKILL.md).

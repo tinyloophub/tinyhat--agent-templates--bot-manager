@@ -101,9 +101,11 @@ inventing endpoints:
   `account_members` / `whitelist` / `public_with_blacklist`) and
   the per-agent access list (allow / deny + admin tier). Live.
 - **sync-from-upstream** — fast-forward a target agent's repo to
-  the latest commit on its upstream template. Read status, mirror
-  the diff in plain language, ask for explicit confirmation, then
-  sync. Live.
+  the latest commit on its upstream template. Triggered by "sync",
+  "upgrade", "update from upstream", or "pick up the new version"
+  intents (all the same fast-forward operation). Read status,
+  mirror the diff in plain language, ask for explicit confirmation,
+  then sync. Live.
 - **change-model** — swap the LLM an agent runs against.
 - **change-harness** — swap the runtime harness vendoring.
 - **set-credential** — store an API key / token in the vault.

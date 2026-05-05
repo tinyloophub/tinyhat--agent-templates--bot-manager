@@ -33,14 +33,17 @@ parent monorepo gitlinks that point at it). Each release ships as a
 - `sync-from-upstream` skill body — chat-driven fast-forward of a
   target agent's repo to the latest commit on its upstream
   template, via the live `agents.upstream.{status,sync}`
-  operationIds. Reads the status delta first (pinned SHA,
-  upstream HEAD, files-changed count), mirrors the diff in plain
-  language using only the platform-returned fields (no invented
-  SKILL.md content), waits for an explicit yes, then syncs and
-  reports the new pinned commit. Renders the four real failure
-  modes plainly: already-up-to-date, no-upstream (409),
-  diverged-from-upstream (409 + ahead-paths), and the standard
-  `gated_api_call` `upstream_unreachable` / `timeout` shapes.
+  operationIds. Recognises "sync", "upgrade", "update from
+  upstream", and "pick up the new version" as triggers (all map
+  onto the same fast-forward operation). Reads the status delta
+  first (pinned SHA, upstream HEAD, files-changed count), mirrors
+  the diff in plain language using only the platform-returned
+  fields (no invented SKILL.md content), waits for an explicit
+  yes, then syncs and reports the new pinned commit. Renders the
+  four real failure modes plainly: already-up-to-date, no-upstream
+  (409), diverged-from-upstream (409 + ahead-paths), and the
+  standard `gated_api_call` `upstream_unreachable` / `timeout`
+  shapes.
 
 ### Changed
 

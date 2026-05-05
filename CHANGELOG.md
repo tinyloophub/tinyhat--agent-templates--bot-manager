@@ -31,8 +31,10 @@ parent monorepo gitlinks that point at it). Each release ships as a
 - `set-access-mode` now treats bot-manager as only one possible
   target agent. It resolves the agent the user named and calls the
   generic `/hapi/v1/agents/{ex_id_or_handle:path}/...` routes with
-  that agent's numeric id or canonical handle, rather than hard-
-  coding the platform bot-manager handle into every call.
+  that agent's numeric id or slashless handle, rather than hard-
+  coding the platform bot-manager handle into every call. Slash-
+  bearing canonical handles still work, but slashless identifiers
+  keep HAPI URLs readable.
 - `set-access-mode` now states the per-agent admin and target-user
   scoping rules explicitly: the chatting user must be admin of the
   target agent, and access-list mutations may only use user ids that

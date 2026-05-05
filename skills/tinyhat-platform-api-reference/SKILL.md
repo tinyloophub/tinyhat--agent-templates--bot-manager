@@ -152,7 +152,12 @@ These five operationIds replace the previously-planned
 `agents.set_access_mode`. They are generic for **any** agent whose
 identifier resolves through `/hapi/v1/agents/{ex_id_or_handle:path}`;
 bot-manager is only the platform's own agent, not a special route
-shape. They manage **two orthogonal axes** for an agent:
+shape. The identifier may be a numeric `tinyhat_agents.id`, the
+canonical handle (`tinyhat/agents/bot-manager`), or the slashless
+handle (`tinyhat--agents--bot-manager`). Prefer the slashless handle
+in HAPI URLs so canonical handles are not nested as path segments
+inside another `/agents/...` route. They manage **two orthogonal
+axes** for an agent:
 
 - **Access mode** — the closed enum `restricted | account_members |
   whitelist | public_with_blacklist` that decides who can chat

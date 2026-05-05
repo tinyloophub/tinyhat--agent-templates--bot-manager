@@ -61,17 +61,19 @@ isn't on the admin tier.
 
 Every endpoint below is path-parameterised on the **target agent
 identifier**.
-The platform's resolver only accepts two shapes:
+The platform's resolver accepts three shapes:
 
 - a numeric `tinyhat_agents.id`, or
-- the canonical handle `<account-slug>/agents/<agent-name>`.
+- the canonical handle `<account-slug>/agents/<agent-name>`, or
+- the slashless handle `<account-slug>--agents--<agent-name>`.
 
 A literal placeholder string (e.g. `<self>`, `<this>`, `me`,
 `{agent_identifier}`, `{resolved_agent_identifier}`) will 404.
 Resolve the target agent first from the user's request:
 
 1. If the user gives a canonical handle like
-   `tinyloop/agents/acme-helper`, use that handle.
+   `tinyloop/agents/acme-helper`, convert it to the slashless URL
+   identifier `tinyloop--agents--acme-helper` before calling HAPI.
 2. Otherwise call `agents.list.hapi` and match by the agent name
    or Telegram binding the user named. If there is more than one
    match, ask which agent they meant.
@@ -81,11 +83,13 @@ Resolve the target agent first from the user's request:
    chose the platform bot-manager agent.
 
 After resolution, replace the route variable with the resolved
-identifier. Example: for the target handle
+identifier. Prefer the slashless handle when you have one. Example:
+for the target handle
 `tinyloop/agents/acme-helper`, the access-mode read URL is
-`/hapi/v1/agents/tinyloop/agents/acme-helper/access-mode`.
+`/hapi/v1/agents/tinyloop--agents--acme-helper/access-mode`.
 The `/agents/{ex_id_or_handle:path}/...` route is generic for all
-agents; the slash inside the canonical handle is intentional.
+agents; slash-bearing canonical handles still work, but the
+slashless form keeps the URL shape easier to read.
 
 ## Agent-admin and target-user scope
 
@@ -124,7 +128,7 @@ confirmation:
   added_by_user_id}, …]}`. Use this for "who's on the whitelist?",
   "who can manage `<agent>`?", or to verify a target user's current state
   before changing it. Do not send `{resolved_agent_identifier}`
-  literally; replace it with the numeric id or canonical handle you
+  literally; replace it with the numeric id or slashless handle you
   resolved above.
 
 ## Calling pattern — set the access mode

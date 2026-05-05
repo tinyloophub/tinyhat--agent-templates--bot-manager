@@ -19,12 +19,17 @@ parent monorepo gitlinks that point at it). Each release ships as a
   operationIds and notes that `X-Tinyhat-Acting-User` is
   server-injected by the platform's `gated_api_call` gate (the
   agent must NOT set the header from inside the sandbox).
-- `set-access-mode` "Identifying this agent on the URL" section
-  spells out that the platform's resolver only accepts a numeric
-  agent id or the canonical `<account-slug>/agents/<agent-name>`
-  handle — placeholders like `<self>` would 404 — and that
-  `tinyhat/agents/bot-manager` is only used when the user explicitly
-  targets the platform bot-manager agent.
+- `set-access-mode` "Identifying the target agent on the URL"
+  section spells out the three identifier shapes the platform's
+  resolver accepts — a numeric `tinyhat_agents.id`, the canonical
+  `<account-slug>/agents/<agent-name>` handle, or the slashless
+  `<account-slug>--agents--<agent-name>` form (preferred in HAPI
+  URLs because it does not embed a three-segment handle inside
+  another `/agents/...` route). Placeholders like `<self>` /
+  `<this>` / `me` / `{agent_identifier}` 404. The skill resolves
+  the target the user named first; `tinyhat/agents/bot-manager`
+  is only used when the user explicitly targets the platform
+  bot-manager agent.
 
 ### Changed
 

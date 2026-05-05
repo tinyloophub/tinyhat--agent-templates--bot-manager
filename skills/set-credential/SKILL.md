@@ -45,7 +45,10 @@ this skill does not touch them.
 3. **Apply** by calling `gated_api_call` against
    **`users.me.vaults.upsert`** (cited per `HAT.md`'s "always
    cite by operationId" rule — see
-   `tinyhat-platform-api-reference` for the surface). Body:
+   `tinyhat-platform-api-reference` for the surface). The `url=`
+   argument is the relative path **`/hapi/v1/users/me/vaults`** —
+   never `https://api.tinyhat.dev/...` or any other host; the
+   orchestrator resolves the platform host server-side. Body:
 
    ```json
    {

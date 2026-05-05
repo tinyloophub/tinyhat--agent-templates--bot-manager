@@ -75,6 +75,23 @@ parent monorepo gitlinks that point at it). Each release ships as a
   through access-mode/access-list operations.
 - Smoke evals cover the zero-token Managed Bots create path and the
   register-channel refusal for managed-bot agents.
+- `tinyhat-platform-api-reference`, `sync-from-upstream`,
+  `set-access-mode`, and `set-credential` skill bodies sharpen the
+  "pass a relative `/hapi/v1/...` path" guidance into an explicit
+  anti-pattern callout that names the LLM-fabricated hosts the
+  agent must never prepend (`api.tinyhat.dev`, `api.tinyloop.co`,
+  `<account>.tinyhat.dev`, `localhost:...`). The
+  `tinyhat-platform-api-reference` calling-pattern template now
+  includes a wrong-vs-right URL table, and the `not_authorized`
+  error row tells the agent to check the URL shape before
+  diagnosing an ACL refusal — fixing the LLM-hallucination root
+  cause described in the issue, not asking the user to widen the
+  agent's outbound ACL for a fabricated hostname.
+- `sync-from-upstream` and `set-access-mode` add a
+  `not_authorized` (gated_api_call gate) error section that
+  distinguishes the gate refusal (typically a fabricated host on
+  the `url=` argument) from the per-agent admin / upstream `403`,
+  so the agent renders the right diagnosis to the user.
 - `set-access-mode` now treats bot-manager as only one possible
   target agent. It resolves the agent the user named and calls the
   generic `/hapi/v1/agents/{ex_id_or_handle:path}/...` routes with

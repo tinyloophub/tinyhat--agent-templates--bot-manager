@@ -19,6 +19,18 @@ You also do not need a platform base URL or sandbox bearer token.
 For first-party Tinyhat calls, pass a relative `/hapi/v1/...` path;
 the backend function tool resolves the platform host server-side.
 
+> **Do NOT prepend a host.** `url="https://api.tinyhat.dev/..."` is
+> wrong. `url="https://api.tinyloop.co/..."` is wrong.
+> `url="https://<account>.tinyhat.dev/..."` is wrong.
+> `url="http://localhost:.../..."` is wrong. The orchestrator
+> resolves the platform host from server-known state — the agent
+> never sees it, names it, or sets it. Always pass a path that
+> starts with `/hapi/v1/`. **If you find yourself typing `http://`
+> or `https://` on a Tinyhat call, you've gone wrong** — back up
+> and write the relative path. A wrong host triggers
+> `not_authorized` because the host isn't in the agent's outbound
+> ACL; do not ask the user to widen the ACL — fix the URL.
+
 The only callable surface is **`/hapi/v1/`** (the agent-centric
 platform API shipped in #155 / W-REVISE). Do not call any other
 path prefix. If a capability you need isn't here yet, say so to
@@ -37,11 +49,29 @@ Every call goes through one tool, with one shape:
 ```text
 gated_api_call(
   method   = "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
-  url      = "/hapi/v1/<path>",
-  json_body= { … } | null,    # only for POST / PATCH / PUT
-  query    = { … } | null,    # for GET filters or paging
+  url      = "/hapi/v1/<path>",   # MUST start with "/hapi/v1/" — never a scheme + host
+  json_body= { … } | null,        # only for POST / PATCH / PUT
+  query    = { … } | null,        # for GET filters or paging
 )
 ```
+
+The `url` argument is a **path**, not a URL. It MUST start with
+`/hapi/v1/`. A leading `http://` or `https://` is always wrong on
+this tool — including any of these LLM-fabricated hosts:
+
+| Wrong (do NOT pass)                                         | Right (pass this instead) |
+|-------------------------------------------------------------|---------------------------|
+| `https://api.tinyhat.dev/hapi/v1/agents/<…>/upstream/status` | `/hapi/v1/agents/<…>/upstream/status` |
+| `https://api.tinyloop.co/hapi/v1/agents`                     | `/hapi/v1/agents` |
+| `https://<account>.tinyhat.dev/hapi/v1/...`                  | `/hapi/v1/...` |
+| `http://localhost:8000/hapi/v1/...`                          | `/hapi/v1/...` |
+
+If you put a scheme + host on the `url`, the orchestrator passes
+it through unchanged, the host won't be in this agent's outbound
+ACL, and the call refuses with `not_authorized`. The right
+response in that case is **fix the URL**, not ask the user to widen
+the ACL — the agent should never have been pointed at that host
+in the first place.
 
 Returns either an upstream response shape:
 
@@ -54,7 +84,7 @@ on which one you got):
 
 | Error code             | Meaning + how to react                                  |
 |------------------------|---------------------------------------------------------|
-| `not_authorized`       | Host or path is not in this agent's ACL. Tell the user the action isn't permitted; do not retry. |
+| `not_authorized`       | Host or path is not in this agent's ACL. **First, check that you passed a relative `/hapi/v1/...` path** — a fabricated `https://api.tinyhat.dev/...` or `https://api.tinyloop.co/...` host is the most common cause and the right fix is to drop the scheme + host, NOT to ask the user to widen the ACL. If the URL is already a relative `/hapi/v1/...` path, then the action genuinely isn't permitted; tell the user and do not retry. |
 | `credential_missing`   | Operator hasn't set the vault key yet. Tell the user the platform isn't bootstrapped for this action. |
 | `vault_unavailable`    | Infrastructure problem (key rotation, MAC mismatch). Apologise briefly and suggest retrying later. |
 | `rate_limited`         | Wait `retry_after_seconds` and try again, OR tell the user to retry shortly. |

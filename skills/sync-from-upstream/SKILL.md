@@ -1,82 +1,93 @@
 ---
 name: sync-from-upstream
-description: Fast-forward a target agent's repo to its upstream template's HEAD. Read status, mirror the diff in plain language, confirm, then sync. Never invent diff content.
+description: Fast-forward the bot-manager's repo to its upstream template's HEAD. Read status, mirror the diff in plain language, confirm, then sync. v0.1.0 is bot-manager self-sync only.
 runtime_tier: 0
 ---
 
 # sync-from-upstream
 
-Each running agent on the platform is a fork of an upstream
-template repository (the bot-manager itself forks
-`tinyhat/agent-templates/bot-manager`; user agents fork the
-`default-agent` template, or whichever template they were created
-from). When the upstream advances — a new SKILL.md lands, a soul
-edit ships, a workflow gets sharpened — the running fork stays at
-its old pinned commit until someone fast-forwards it.
+The bot-manager itself is a fork of an upstream template repository
+(`tinyhat/agent-templates/bot-manager`). When the upstream advances
+— a new SKILL.md lands, a soul edit ships, a workflow gets sharpened
+— the running fork stays at its old pinned commit until someone
+fast-forwards it.
 
-This skill is the **chat-driven** version of that fast-forward.
-Plain-language triggers all map onto the same flow:
+This skill is the **chat-driven** version of that fast-forward,
+**scoped to the bot-manager's own repo for v0.1.0**. The user
+(the maintainer) says "sync yourself" / "upgrade" / "update from
+upstream", and the skill reads the upstream-status delta on the
+bot-manager's own row, mirrors the change in plain language, asks
+for an explicit yes, and then runs the sync.
 
-- "sync yourself" / "sync acme-helper"
-- "upgrade" / "upgrade yourself" / "upgrade acme-helper"
+## v0.1.0 scope — bot-manager self-sync only
+
+For v0.1.0 the **only** target this skill operates on is the
+running bot-manager itself, identified by the canonical handle
+`tinyhat/agents/bot-manager` (URL form
+`tinyhat--agents--bot-manager`).
+
+The platform's upstream-sync HAPI routes
+(`agents.upstream.status`, `agents.upstream.sync`) currently gate
+on the bot-manager's internal admin bearer alone — they do **not**
+yet receive an `X-Tinyhat-Acting-User` header or run a per-agent
+admin check. Until that platform-side gate ships (tracked as a
+follow-up to issue tinyloophub/tinyloop#282), letting this skill
+fast-forward an arbitrary user-agent on a non-maintainer's request
+would authorise the write as the bot-manager bearer regardless of
+who was chatting. That is the failure mode this scope restriction
+prevents.
+
+Hard rules:
+
+1. **Refuse "sync `<other-agent>`" / "upgrade `<other-agent>`"
+   requests.** The chat-driven sync of any agent other than
+   bot-manager is explicitly out of scope per the issue's "Out of
+   scope" section. Reply with the canned refusal in §"Refusing
+   per-user-agent requests" below; do not call HAPI.
+2. **Always use the literal handle `tinyhat--agents--bot-manager`**
+   on every URL in this skill. Do not call `agents.list.hapi` to
+   resolve the target — there is no resolution step in v0.1.0.
+3. **Treat "sync yourself" / "upgrade yourself" / "update from
+   upstream" as the only valid trigger shapes.** Each names the
+   bot-manager unambiguously.
+
+When the platform-side per-agent admin gate ships, this skill body
+will widen to support per-user-agent targets (same shape as
+`set-access-mode`).
+
+## Plain-language triggers
+
+All of these map onto the same flow against the bot-manager's own
+upstream row:
+
+- "sync yourself" / "sync"
+- "upgrade" / "upgrade yourself"
 - "update from upstream" / "update yourself"
 - "pick up the new version" / "pull the latest version"
 - "fast-forward yourself" / "advance to upstream HEAD"
 
-For any of those, resolve the target agent, read the
-upstream-status delta, mirror the change in plain language, ask
-for an explicit yes, and then run the sync. "Upgrade" is the same
-operation as "sync" here — the platform only ships fast-forward
-syncs (see "What 'fast-forward' means" below), so an "upgrade"
-request is never a different mutation; it just lands the new
-template content the user is asking for.
+"Upgrade" is the same operation as "sync" here — the platform only
+ships fast-forward syncs (see §"What 'fast-forward' means" below),
+so an "upgrade" request is never a different mutation.
 
 The platform endpoints this skill calls are documented in
 [`tinyhat-platform-api-reference`](../tinyhat-platform-api-reference/SKILL.md).
 Every call here is a `gated_api_call` — there are no in-sandbox curls
 and you never see a token.
 
-## Identifying the target agent on the URL
-
-Every endpoint below is path-parameterised on the **target agent
-identifier**. The platform's resolver accepts three shapes:
-
-- a numeric `tinyhat_agents.id`, or
-- the canonical handle `<account-slug>/agents/<agent-name>`, or
-- the slashless handle `<account-slug>--agents--<agent-name>`.
-
-A literal placeholder string (e.g. `<self>`, `<this>`, `me`,
-`{agent_identifier}`, `{resolved_agent_identifier}`) will 404.
-Resolve the target agent first from the user's request:
-
-1. If the user gives a canonical handle like
-   `tinyloop/agents/acme-helper`, convert it to the slashless URL
-   identifier `tinyloop--agents--acme-helper` before calling HAPI.
-2. Otherwise call `agents.list.hapi` and match by the agent name
-   the user named. If there is more than one match, ask which
-   agent they meant.
-3. If the user says "this bot", "you", "yourself", or
-   "bot-manager", clarify whether they mean the manager bot
-   itself or one of their agents. Only use
-   `tinyhat/agents/bot-manager` (or the slashless
-   `tinyhat--agents--bot-manager`) when the user explicitly chose
-   the platform bot-manager agent.
-
-After resolution, replace the route variable with the resolved
-identifier. Prefer the slashless handle when you have one. Example:
-for the target handle `tinyloop/agents/acme-helper`, the
-upstream-status URL is
-`/hapi/v1/agents/tinyloop--agents--acme-helper/upstream/status`.
-
 ## What "fast-forward" means
 
 The platform only ships **fast-forward** syncs: the agent's repo
 must contain every commit on the upstream's default branch up to
 the upstream's HEAD, with no local commits ahead of that lineage.
-Two failure modes you need to render plainly when they happen:
+Three failure modes you need to render plainly when they happen:
 
 - **Already up-to-date.** Pinned SHA already equals upstream HEAD.
   No commit lands; the skill reports "nothing to sync" and stops.
+- **No upstream wiring.** The bot-manager's row has no
+  `upstream_repo_id` / `upstream_pinned_sha` (an unusual fresh-
+  bootstrap state). Detect this at the read step — see §"Calling
+  pattern — read status".
 - **Diverged.** The agent's repo has commits the upstream doesn't
   carry. The platform refuses with 409 + a list of "ahead paths"
   so the user can see what local edits would be lost. Do not
@@ -89,7 +100,7 @@ version?" intents. The endpoint is read-only and does not require
 confirmation:
 
 - `agents.upstream.status` —
-  `GET /hapi/v1/agents/{resolved_agent_identifier}/upstream/status`
+  `GET /hapi/v1/agents/tinyhat--agents--bot-manager/upstream/status`
   returns:
   - `up_to_date` (bool) — true when the pin equals upstream HEAD.
   - `pinned_sha` — the commit the running fork is currently at.
@@ -102,12 +113,42 @@ confirmation:
   - `upstream_provider_repo` / `agent_provider_repo` — full
     `<owner>/<repo>` strings the user might recognise.
 
-  Use this **every time** the user asks to sync. Even if the user
-  said "just sync, don't ask", the read+confirm step keeps you
-  honest about what you're about to land.
+Use this **every time** the user asks to sync. Even if the user
+said "just sync, don't ask", the read+confirm step keeps you
+honest about what you're about to land.
 
-  Replace `{resolved_agent_identifier}` literally; do not send the
-  brace-wrapped placeholder.
+### Branch on the read response BEFORE asking to confirm
+
+The read shape distinguishes three states the user should hear
+about plainly. Decide which applies before drafting the
+confirmation prompt:
+
+1. **No upstream wiring** — `upstream_provider_repo` is null **and**
+   `upstream_head_sha` is null (and typically `pinned_sha` is null
+   too). The bot-manager's row has no upstream binding to compare
+   against. This is a fresh-bootstrap edge case for the platform
+   bot-manager and a normal state for any agent provisioned without
+   a template. Tell the user plainly and stop:
+
+   > "the bot-manager has no upstream template wired up, so
+   > there's nothing to sync from. The maintainer needs to bind an
+   > upstream from the admin panel before this flow can run."
+
+   Do **not** invent an upstream URL and do **not** call
+   `agents.upstream.sync` — the mutation would 409 with the same
+   meaning, but the read-step refusal saves a round-trip.
+2. **Upstream readable but the read failed** —
+   `upstream_provider_repo` is present (e.g.
+   `tinyloophub/tinyhat--agent-templates--bot-manager`) but
+   `upstream_head_sha` and `files_changed_count` are null. This is
+   the network-flake / auth-issue case: the platform knows where
+   to look but couldn't reach it on this read. Say so plainly:
+
+   > "the bot-manager is pinned at `<short-pinned-sha>`. I can't
+   > read the upstream HEAD right now (network or auth issue), so
+   > I don't know what would change. Want me to retry the read?"
+3. **Both pin and upstream-HEAD known** — the normal happy path.
+   Drop into §"Calling pattern — sync" with the full diff summary.
 
 ## Calling pattern — sync
 
@@ -115,24 +156,17 @@ Use this for "yes, sync now" intents. **Always** run the read step
 above first; the read returns the diff summary you mirror in the
 confirmation prompt.
 
-1. **Resolve the target agent** (per the section above) and name it
-   back. "Sync `<agent-handle>`?"
-2. **Read the status** with `agents.upstream.status`. If
-   `up_to_date=true`, tell the user "nothing to sync — pinned and
-   upstream are at `<short-sha>`" and stop.
+1. **Name the target back.** "Sync the bot-manager?"
+2. **Read the status** with `agents.upstream.status`. Branch per
+   §"Branch on the read response" above. If `up_to_date=true`,
+   tell the user "nothing to sync — pinned and upstream are at
+   `<short-sha>`" and stop.
 3. **Mirror the change** in plain language using ONLY the fields
-   the read returned. Two correct shapes:
+   the read returned:
 
-   > "`<agent-handle>` is pinned at `<short-pinned-sha>`. Upstream
+   > "the bot-manager is pinned at `<short-pinned-sha>`. Upstream
    > is at `<short-upstream-sha>` (`<files_changed_count>` files
    > changed). Sync now?"
-
-   When `files_changed_count` is null (upstream unreadable),
-   say so plainly:
-
-   > "`<agent-handle>` is pinned at `<short-pinned-sha>`. I can't
-   > read the upstream HEAD right now (network or auth issue), so
-   > I don't know what would change. Want me to retry the read?"
 
    Do **not** invent file names, commit messages, or SKILL.md
    diffs. The platform does not return them, and hallucinated
@@ -142,10 +176,10 @@ confirmation prompt.
 4. **Confirm.** Wait for an explicit "yes" / "go ahead" / "do it".
    "ok" or a thumbs-up emoji counts; silence does not.
 5. **Apply** with `agents.upstream.sync` —
-   `POST /hapi/v1/agents/{resolved_agent_identifier}/upstream/sync`,
-   no body. Replace `{resolved_agent_identifier}` first. The
-   endpoint is idempotent: re-running an already-synced agent
-   returns `status='up_to_date'` without writing.
+   `POST /hapi/v1/agents/tinyhat--agents--bot-manager/upstream/sync`,
+   no body. The endpoint is idempotent: re-running an
+   already-synced agent returns `status='up_to_date'` without
+   writing.
 6. **Report back.** Echo the post-sync result using only the
    fields the response returned:
    - `status` — `'synced'` (a fresh fast-forward landed) or
@@ -158,23 +192,40 @@ confirmation prompt.
 
    Example reply for a successful sync:
 
-   > "Synced `<agent-handle>`: `<short-from-sha>` → `<short-to-sha>` (`<files_changed>` file(s)).
+   > "Synced the bot-manager: `<short-from-sha>` → `<short-to-sha>` (`<files_changed>` file(s)).
    > <commit_html_url, if present>"
 
    For `status='up_to_date'`:
 
-   > "`<agent-handle>` was already at `<short-to-sha>` — no commit
+   > "the bot-manager was already at `<short-to-sha>` — no commit
    > needed."
 
 ## Picking up the new content
 
-The fast-forward commit lands on the agent's repo, but the running
-agent process keeps the **previous** SKILL.md / SOUL.md / HAT.md
-content in memory until its next conversation turn re-mounts the
-hat. Tell the user this directly: "the next message you send to
-`<agent-handle>` will use the new template content." A second
-follow-up message after the sync is the canonical "did it actually
-take effect?" check, and that's worth surfacing in the reply.
+The fast-forward commit lands on the bot-manager's repo, but the
+running agent process keeps the **previous** SKILL.md / SOUL.md /
+HAT.md content in memory until its next conversation turn re-mounts
+the hat. Tell the user this directly: "the next message you send
+will use the new template content." A second follow-up message
+after the sync is the canonical "did it actually take effect?"
+check, and that's worth surfacing in the reply.
+
+## Refusing per-user-agent requests
+
+When the user says "sync acme-helper" / "upgrade my agent" / any
+target that is not the bot-manager itself, refuse with this canned
+shape:
+
+> "I can fast-forward the bot-manager from its upstream template,
+> but per-user-agent sync from chat isn't wired up yet — that flow
+> lands later as a follow-up to the v0.1.0 cut. For now, the
+> maintainer can sync individual agents from the admin UI."
+
+Do not call HAPI on the user's behalf. Do not promise to add it
+later in this conversation. The user can run the same operation
+from the admin panel today; the chat-driven version of it is
+gated on the platform-side per-agent admin gate landing, which is
+explicit out-of-scope work.
 
 ## Errors to render plainly
 
@@ -183,32 +234,37 @@ up in real syncs. Map each one to a clear chat reply:
 
 ### `404` — agent not found
 
-The resolver couldn't match the identifier you sent. Either the
-target agent doesn't exist, or you used a placeholder
-(`<self>` / `me` / a brace-wrapped variable) instead of resolving
-first. Re-resolve from the user's request and try again; do not
-loop.
+The bot-manager's handle didn't resolve. This should not happen in
+a healthy deployment — it usually means the running agent's row
+was deleted or the canonical handle is mistyped. Surface the
+platform error verbatim and stop; do not loop.
 
 ### `409` — agent has no upstream
 
-The target agent has no `upstream_repo_id` / `upstream_pinned_sha`
-on its row — usually a custom agent that was provisioned without a
-template, or one whose template binding was cleared. Tell the user
-plainly: "this agent was set up without an upstream template, so
-there's nothing to sync from." Do not try to invent an upstream.
+The bot-manager's row has no `upstream_repo_id` /
+`upstream_pinned_sha`. You should normally have caught this at the
+read step (§"Branch on the read response BEFORE asking to
+confirm"); if you reach the sync mutation and still see this 409,
+fall through to the same plain refusal:
+
+> "the bot-manager has no upstream template wired up, so there's
+> nothing to sync from. The maintainer needs to bind an upstream
+> from the admin panel before this flow can run."
+
+Do not try to invent an upstream.
 
 ### `409` — diverged from upstream
 
-The running fork has commits the upstream doesn't carry. The
+The bot-manager's repo has commits the upstream doesn't carry. The
 response body lists `agent_head_sha` and `ahead_paths` (the file
 paths whose tip on the agent's branch is ahead of upstream). Tell
 the user what's ahead, name the conflict, and stop:
 
-> "`<agent-handle>` has local commits that aren't in upstream.
+> "the bot-manager has local commits that aren't in upstream.
 > Files ahead: `<ahead_paths>`. A fast-forward would lose those
-> changes, so I won't run the sync. The owner can either pull the
-> local edits into the upstream first, or reset the fork — both
-> are out of scope for chat."
+> changes, so I won't run the sync. The maintainer can either pull
+> the local edits into the upstream first, or reset the fork —
+> both are out of scope for chat."
 
 Do not attempt a merge, a rebase, or a force-push. Do not pretend
 the sync ran.
@@ -216,19 +272,17 @@ the sync ran.
 ### `403` — caller not authorised
 
 For v0.1.0 the upstream-sync endpoints accept the platform's
-internal admin bearer (the bot-manager's outbound credential),
-not a per-chatter principal. If you ever see a 403 here it means
-the platform deployment ahead of you has tightened the gate.
-Surface the platform error verbatim and stop; the maintainer's
-follow-up is to widen the per-agent admin gate per
-`tinyloophub/tinyloop` issue threads about per-user-agent sync
-from chat.
+internal admin bearer that the bot-manager already carries. If you
+see a 403 here it means the platform deployment ahead of you has
+tightened the gate (the per-agent admin gate finally landing).
+Surface the platform error verbatim and stop. Do not retry under
+a different identity.
 
 ### `upstream_unreachable` / `timeout`
 
 These are the standard `gated_api_call` shapes — network flake or
 GitHub down. Tell the user we couldn't reach the upstream and
-suggest retrying in a minute. Do not loop on its own initiative;
+suggest retrying in a minute. Do not loop on your own initiative;
 one retry on user request is enough.
 
 ## Confirm-then-act is mandatory
@@ -248,7 +302,8 @@ The skill that gets this wrong looks like:
 > reports `status='synced'`.
 
 The user has no idea what just landed and the change is already
-live. The right shape is: read → mirror → wait → mutate → report.
+live. The right shape is: read → branch on response → mirror →
+wait → mutate → report.
 
 ## Don't loop
 
@@ -264,13 +319,12 @@ half-applied.
 - **Auto-sync on a schedule.** The platform has no scheduled-sync
   surface; if the user asks, tell them this skill is on-demand
   only. Out-of-scope for v0.1.0.
-- **Per-user-agent sync from a non-admin chatter.** v0.1.0 wires
-  the chat path for the maintainer (the platform's
-  `is_tinyloop_admin` user) only. A non-admin chatter who DMs the
-  bot-manager and asks to sync a different agent will hit the
-  platform's per-agent admin gate elsewhere in the request chain
-  before reaching this skill.
-- **Cross-template moves.** Re-pointing a running fork at a
+- **Per-user-agent sync from chat.** v0.1.0 covers bot-manager
+  self-sync only — see §"v0.1.0 scope" and §"Refusing per-user-
+  agent requests". Per-user-agent sync is a follow-up to the
+  v0.1.0 cut and depends on the platform-side per-agent admin
+  gate for the upstream-sync routes.
+- **Cross-template moves.** Re-pointing the bot-manager at a
   different upstream template repo is a separate `change-harness`
   / re-provision flow; this skill only fast-forwards within the
   current upstream binding.

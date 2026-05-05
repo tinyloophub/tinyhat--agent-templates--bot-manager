@@ -92,8 +92,19 @@ above. Some depend on platform endpoints that haven't shipped yet;
 those skill bodies tell the user "not yet wired up" rather than
 inventing endpoints:
 
-- **provision-user-agent** — create a new agent for a user.
-- **register-telegram-channel** — bind a Telegram bot to an agent.
+- **provision-user-agent** — create a new user-owned Telegram agent
+  through Managed Bots. It proposes a
+  `https://t.me/newbot/...` link with
+  `propose_managed_bot_creation`, waits for Telegram's matched
+  `managed_bot` confirmation, then calls `agents.create` with
+  `kind='user'` + `managed_bot_id` (never a user-visible token).
+  Created agents start restricted with the creator as explicit
+  allow/admin; sharing later uses the access-mode + access-list
+  operations below.
+- **register-telegram-channel** — future import-existing-bot
+  escape hatch only. Managed Bots agents from
+  `provision-user-agent` are bound automatically during
+  `agents.create`.
 - **customize-soul** — edit a hat's identity prose.
 - **add-skill-from-repo** — mount an external skill on an agent.
 - **extract-skill** — publish an in-tree skill as its own repo.
@@ -125,6 +136,14 @@ Function tools (from `bot-manager-20260427`):
   v0 `read-older-history` SKILL.md (same broken-proxy failure
   mode). Reads directly from `tinyhat_messages` in our backend; no
   sandbox network involved.
+- **`propose_managed_bot_creation(suggested_username, suggested_name)`**
+  — create a pending Telegram Managed Bots proposal for the
+  chatting user and return the `https://t.me/newbot/...` deep link.
+  The tool validates Telegram username shape (including the `bot`
+  suffix), verifies the manager bot can manage bots, and never
+  returns or exposes a bot token. The later Telegram `managed_bot`
+  callback is recorded by the platform and is what unlocks
+  `agents.create(kind='user')`.
 
 Function tools (from `outbound-20260427` — [issue #101](https://github.com/tinyloophub/tinyloop/issues/101)):
 

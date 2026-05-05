@@ -102,26 +102,119 @@ auth, which it does not.
 Each operation below lives under `/hapi/v1/<path>`. Auth: Bearer
 header injected by the gate from the bot-manager's admin vault.
 
+### Bot-manager function tools
+
+These are not HTTP endpoints. They are backend-hosted function tools
+from the `bot-manager-20260427` toolkit. Use them directly when the
+workflow calls for them.
+
+#### `propose_managed_bot_creation(suggested_username, suggested_name)`
+
+Prepare a Telegram Managed Bots creation link for the chatting user.
+Inputs:
+
+- `suggested_username`: Telegram bot username to propose. It must be
+  5-32 letters/digits/underscores, start with a letter, and end with
+  `bot` case-insensitively.
+- `suggested_name`: Telegram display name.
+
+The tool validates the username shape, verifies the manager bot has
+Bot Management Mode (`can_manage_bots=true`), stores a pending
+correlation row, and returns:
+
+```json
+{
+  "correlation_id": "mbc_...",
+  "manager_bot_username": "tinyhatbot",
+  "suggested_username": "acme_support_2026_bot",
+  "suggested_name": "Acme Support",
+  "deep_link": "https://t.me/newbot/tinyhatbot/acme_support_2026_bot?name=Acme+Support"
+}
+```
+
+Send the returned `deep_link` to the user and tell them to keep the
+suggested username unchanged in Telegram's confirmation sheet.
+Telegram does not echo Tinyhat's correlation id back in the later
+`managed_bot` update, so the platform matches the callback by
+manager, creator, and suggested username.
+
+Matched callbacks are recorded as `status='confirmed'` with creator
+identity, managed bot id, managed bot username, and the raw Telegram
+confirmation payload. Unmatched callbacks are stored as
+`status='unmatched'` for audit/retry only; `agents.create(kind='user')`
+will not accept them.
+
 ### Agent lifecycle
 
 #### `agents.create` — `POST /hapi/v1/agents`
 
 Create an agent end-to-end (the **same** endpoint the maintainer
 uses from `/admin/that` to create the platform agent + every
-subsequent user agent). Body shape:
+subsequent user agent).
+
+The credential shape depends on `kind`.
+
+System agent bootstrap (the platform's own bot-manager) uses the
+one-time BotFather token:
 
 ```json
 {
   "channel": "telegram",
+  "account_handle": "tinyhat",
+  "kind": "system",
   "telegram_bot_token": "<BotFather token>",
-  "account_handle": "tinyloop",
-  "kind": "system" | "user",
-  "handle": "<optional kebab-case>",
   "owner_telegram_handle": "<optional Telegram @username>"
 }
 ```
 
-Response: `{"ex_id": "agt_…", "handle": …, "account_handle": …, "kind": …, "telegram_username": …, "webhook_url": …, "access_mode": …, "status": …}`. `Idempotency-Key` header dedupes retries against the provisioning state machine (#176 PR-B-1).
+User-agent creation uses Telegram Managed Bots and **never** accepts
+`telegram_bot_token`:
+
+```json
+{
+  "channel": "telegram",
+  "account_handle": "acme",
+  "kind": "user",
+  "handle": "support",
+  "name": "Acme Support",
+  "managed_bot_id": "777001234"
+}
+```
+
+Rules for `kind='user'`:
+
+- `managed_bot_id` is required and must be Telegram's numeric
+  `ManagedBotUpdated.bot.id`.
+- A matched `tinyhat_managed_bot_creations.status='confirmed'` row
+  must exist for that managed bot id. `status='unmatched'` is not
+  enough; treat it as retry/operator-review state.
+- `telegram_bot_token` is forbidden. The backend calls
+  `getManagedBotToken` with the manager token, then writes the
+  fetched child token only to the new agent's own `telegram` vault.
+- Initial ownership comes from the Telegram user in the confirmed
+  `managed_bot` update. If `owner_telegram_handle` is supplied, it
+  is only an assertion and is rejected if it does not match the
+  confirmed creator.
+- `handle` is the Tinyhat in-account agent handle. It is separate
+  from the globally-unique Telegram bot username.
+
+The platform persists non-secret bot metadata with the provisioning
+state and agent row: Telegram bot id, username, webhook URL, and the
+derived `https://t.me/<username>` address. The raw Telegram
+confirmation payload is preserved on the managed-bot creation row.
+
+Response:
+`{"ex_id": "agt_…", "handle": …, "account_handle": …, "kind": …, "telegram_username": …, "webhook_url": …, "access_mode": …, "status": …}`.
+`Idempotency-Key` header dedupes retries against the provisioning
+state machine (#176 PR-B-1).
+
+New user agents start `access_mode='restricted'`,
+`primary_owner_user_id` set to the managed-bot creator, and an
+explicit access-list row for that creator:
+`{"kind": "allow", "is_admin": true}`. Only the creator can chat
+initially, and because they are admin they can later use
+`agents.access-mode.*` and `agents.access-list.*` to widen access or
+add more admins.
 
 #### `agents.list.hapi` — `GET /hapi/v1/agents`
 

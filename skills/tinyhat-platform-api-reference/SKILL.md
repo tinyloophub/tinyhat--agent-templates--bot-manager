@@ -149,8 +149,10 @@ Fast-forward the agent's repo to upstream HEAD. No body.
 ### Per-agent access mode + access-list
 
 These five operationIds replace the previously-planned
-`agents.set_access_mode`. They manage **two orthogonal axes** for an
-agent:
+`agents.set_access_mode`. They are generic for **any** agent whose
+identifier resolves through `/hapi/v1/agents/{ex_id_or_handle:path}`;
+bot-manager is only the platform's own agent, not a special route
+shape. They manage **two orthogonal axes** for an agent:
 
 - **Access mode** — the closed enum `restricted | account_members |
   whitelist | public_with_blacklist` that decides who can chat
@@ -166,6 +168,13 @@ The agent's primary owner is implicit admin; tinyloop superadmins
 are admin of every agent; anyone else needs an explicit
 `is_admin=true` access-list entry. The `set-access-mode` skill is
 the user-facing workflow that drives these operations.
+
+Access-list mutations are also scoped to the target agent. The
+`user_id` in `agents.access-list.entries.upsert` and `.delete` is
+not a global-user escape hatch; the platform only accepts users who
+are already in the target agent's scope (for example the owner, an
+account member, someone who has talked to that agent, or an
+existing row on that agent's access list).
 
 **`X-Tinyhat-Acting-User` is server-injected.** When a per-agent
 admin endpoint runs, the platform automatically attaches the
@@ -209,7 +218,8 @@ Add or update an `(agent, user)` row. Body:
 Idempotent on `(agent_id, user_id)`. Refuses
 `{"kind": "deny", "is_admin": true}` with 409 (a denied user can't
 be admin). 404 when the target user_id doesn't exist. 403 when
-caller isn't admin.
+caller isn't admin. 404 when the target user exists globally but is
+outside this agent's scope.
 
 #### `agents.access-list.entries.delete` — `DELETE /hapi/v1/agents/{ex_id_or_handle}/access-list/entries/{user_id}`
 

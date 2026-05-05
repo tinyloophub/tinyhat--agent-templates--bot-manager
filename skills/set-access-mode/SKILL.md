@@ -1,6 +1,6 @@
 ---
 name: set-access-mode
-description: Manage who can chat with this agent (the access-mode enum) and who can manage it (per-agent admin tier). Add, update, or remove access-list entries. Confirm-then-act on every mutation.
+description: Manage who can chat with a target agent (the access-mode enum) and who can manage it (per-agent admin tier). Add, update, or remove access-list entries. Confirm-then-act on every mutation.
 runtime_tier: 0
 ---
 
@@ -10,7 +10,9 @@ Each agent has an **access mode** that decides who can chat with it
 on Telegram, plus a per-agent **access list** that names the
 individual users who carry whitelist, blacklist, or admin status.
 This skill is the chat-driven surface for every read and mutation
-on those two things.
+on those two things for the **target agent** the user is asking
+about. The bot-manager is only one agent; do not assume every
+access-mode request targets bot-manager.
 
 The platform endpoints this skill calls are documented in
 [`tinyhat-platform-api-reference`](../tinyhat-platform-api-reference/SKILL.md).
@@ -55,21 +57,57 @@ prod). You don't need to know who that is — `agents.access-mode.set`
 will simply succeed for them and fail with `403` for anyone else who
 isn't on the admin tier.
 
-## Identifying this agent on the URL
+## Identifying the target agent on the URL
 
-Every endpoint below is path-parameterised on the **agent identifier**.
+Every endpoint below is path-parameterised on the **target agent
+identifier**.
 The platform's resolver only accepts two shapes:
 
 - a numeric `tinyhat_agents.id`, or
 - the canonical handle `<account-slug>/agents/<agent-name>`.
 
-A literal placeholder string (e.g. `<self>`, `<this>`, `me`) will
-404. The bot-manager template is the platform's `is_platform: true`
-hat, so the running agent's canonical handle is **always**
-`tinyhat/agents/bot-manager` — use that literal handle on every
-URL in this skill. (If a future fork of this template runs as a
-non-platform agent, the fork's owner will replace `tinyhat/agents/bot-manager`
-with their fork's canonical handle when they update the skill body.)
+A literal placeholder string (e.g. `<self>`, `<this>`, `me`,
+`{agent_identifier}`, `{resolved_agent_identifier}`) will 404.
+Resolve the target agent first from the user's request:
+
+1. If the user gives a canonical handle like
+   `tinyloop/agents/acme-helper`, use that handle.
+2. Otherwise call `agents.list.hapi` and match by the agent name
+   or Telegram binding the user named. If there is more than one
+   match, ask which agent they meant.
+3. If the user says "this bot", "you", or "bot-manager", clarify
+   whether they mean the manager bot itself or one of their agents.
+   Only use `tinyhat/agents/bot-manager` when the user explicitly
+   chose the platform bot-manager agent.
+
+After resolution, replace the route variable with the resolved
+identifier. Example: for the target handle
+`tinyloop/agents/acme-helper`, the access-mode read URL is
+`/hapi/v1/agents/tinyloop/agents/acme-helper/access-mode`.
+The `/agents/{ex_id_or_handle:path}/...` route is generic for all
+agents; the slash inside the canonical handle is intentional.
+
+## Agent-admin and target-user scope
+
+Every endpoint in this skill is limited to admins of the **target
+agent**. The platform injects the chatting user as the acting user
+before the request reaches `/hapi/v1`; you do not set
+`X-Tinyhat-Acting-User` yourself. A 403 means this chatting user is
+not an admin of that target agent.
+
+For access-list mutations, a `user_id` is not a global lookup
+escape hatch. Use a target `tinyhat_users.id` only when it came from
+agent-scoped context, such as:
+
+- an existing access-list row for the target agent,
+- a pending / recent inbound request for the target agent, or
+- an agent-scoped platform response that explicitly ties the user
+  to the target agent.
+
+Do not call a global user list or ask the owner to guess arbitrary
+database ids. If you only have a Telegram handle and no agent-scoped
+user id yet, ask the person to message the target agent first or say
+you need an agent-scoped lookup before you can add them.
 
 ## Calling pattern — read
 
@@ -77,22 +115,28 @@ Use these for "who can talk to me right now?" / "show my settings"
 intents. Both endpoints are read-only and do not require
 confirmation:
 
-- `agents.access-mode.get` — `GET /hapi/v1/agents/tinyhat/agents/bot-manager/access-mode`
+- `agents.access-mode.get` — `GET /hapi/v1/agents/{resolved_agent_identifier}/access-mode`
   returns `{agent_id, agent_handle, mode, allowed_modes}`. The
   `allowed_modes` list lets you offer the user a menu of valid
   next states without baking the enum into your prompt.
-- `agents.access-list.get` — `GET /hapi/v1/agents/tinyhat/agents/bot-manager/access-list`
+- `agents.access-list.get` — `GET /hapi/v1/agents/{resolved_agent_identifier}/access-list`
   returns `{agent_id, agent_handle, entries: [{user_id, kind, is_admin,
   added_by_user_id}, …]}`. Use this for "who's on the whitelist?",
-  "who can manage me?", or to verify a target user's current state
-  before changing it.
+  "who can manage `<agent>`?", or to verify a target user's current state
+  before changing it. Do not send `{resolved_agent_identifier}`
+  literally; replace it with the numeric id or canonical handle you
+  resolved above.
 
 ## Calling pattern — set the access mode
 
 Use this for "make yourself public", "switch to invite-only", "go
 private", "open to my account team":
 
-1. **Disambiguate the intent.** Plain English maps onto the four
+1. **Resolve and confirm the target agent.** If the user said
+   "make acme-helper public", resolve `acme-helper` first and name
+   it back. If they said "make yourself public", ask whether they
+   mean the bot-manager or another agent.
+2. **Disambiguate the intent.** Plain English maps onto the four
    modes:
    - "go private" / "lock it down" → `restricted`
    - "let my team in" / "open to my account" → `account_members`
@@ -102,18 +146,18 @@ private", "open to my account team":
    When the user says something ambiguous ("let some friends in"),
    ask one clarifying question — `whitelist` and `account_members`
    are easy to confuse.
-2. **Read the current state** with `agents.access-mode.get`. Show
+3. **Read the current state** with `agents.access-mode.get`. Show
    the user what they're about to change FROM.
-3. **Confirm.** Mirror the change back: "I'll switch from `<from>`
+4. **Confirm.** Mirror the change back: "I'll switch `<agent>` from `<from>`
    to `<to>` — that means `<plain-language consequence>`. Confirm?"
    Wait for an explicit "yes". The mirror catches the "I meant
    `account_members`" slip, especially around `whitelist` vs
    `public_with_blacklist`.
-4. **Apply** with `agents.access-mode.set` —
-   `POST /hapi/v1/agents/tinyhat/agents/bot-manager/access-mode`,
+5. **Apply** with `agents.access-mode.set` —
+   `POST /hapi/v1/agents/{resolved_agent_identifier}/access-mode`,
    body `{"mode": "<one of the four>"}`. The endpoint is idempotent
-   on the same value.
-5. **Report back.** Echo the new mode. If the user widened to
+   on the same value. Replace `{resolved_agent_identifier}` first.
+6. **Report back.** Echo the target agent and new mode. If the user widened to
    `whitelist` or `public_with_blacklist` and the access list is
    empty, mention it — "you're now on `whitelist` but no one is on
    the list yet, so only you can chat. Want me to add anyone?"
@@ -131,30 +175,35 @@ or strip admin while keeping chat access.
 
 Steps for a mutation:
 
-1. **Resolve the target user.** When the user names someone by
-   handle ("add alice"), you'll typically need their numeric
-   `tinyhat_users.id`. Ask them for the user's id if you don't
-   already have it from context, or — if `users.list` is in your
-   ACL — search for the handle there. Do not guess. If the
-   platform refuses with 404 ("target user not found"), tell the
-   user directly: the target needs to exist in the platform's user
-   table before they can be added to an access list.
-2. **Confirm.** Mirror the change: "I'll add `alice` to the
-   whitelist (chat-allowed, NOT admin). Confirm?" or "I'll promote
-   `alice` to admin (chat-allowed, can manage settings). Confirm?"
-3. **Apply** with `agents.access-list.entries.upsert` —
-   `POST /hapi/v1/agents/tinyhat/agents/bot-manager/access-list/entries`,
+1. **Resolve the target agent.** Name it back before changing its
+   list.
+2. **Resolve the target user from agent-scoped context.** When the
+   user names someone by handle ("add alice"), you need a numeric
+   `tinyhat_users.id` that is tied to this target agent. Use an
+   existing access-list row, pending / recent inbound request, or
+   other agent-scoped platform response. Do not use global user
+   enumeration and do not accept a guessed id. If the platform
+   refuses with 404 ("target user not found") or says the target
+   user is outside the target agent's scope, tell the user the
+   person needs to message this agent first (or wait for an
+   agent-scoped lookup surface) before they can be added.
+3. **Confirm.** Mirror the change: "I'll add `alice` to
+   `<agent>`'s whitelist (chat-allowed, NOT admin). Confirm?" or
+   "I'll promote `alice` to admin on `<agent>` (chat-allowed, can
+   manage settings). Confirm?"
+4. **Apply** with `agents.access-list.entries.upsert` —
+   `POST /hapi/v1/agents/{resolved_agent_identifier}/access-list/entries`,
    body
    `{"user_id": <id>, "kind": "allow"|"deny", "is_admin": false|true}`.
    Idempotent on `(agent_id, user_id)`; the same call twice returns
    the same row.
-4. **Removing** an entry uses
+5. **Removing** an entry uses
    `agents.access-list.entries.delete` —
-   `DELETE /hapi/v1/agents/tinyhat/agents/bot-manager/access-list/entries/<user_id>`.
+   `DELETE /hapi/v1/agents/{resolved_agent_identifier}/access-list/entries/<user_id>`.
    404 means there was no entry to begin with; surface that as "no
    entry to remove" rather than as an error.
-5. **Report back.** Show the new row's shape (kind + admin) so the
-   user can see exactly what they have.
+6. **Report back.** Show the target agent and the new row's shape
+   (kind + admin) so the user can see exactly what they have.
 
 ### Mutation refused (`409 deny + admin`)
 
@@ -165,13 +214,13 @@ admin"), name the conflict and ask which they meant.
 
 ### Permission refused (`403`)
 
-Only an agent **admin** can call any of these mutations. The
-caller's identity is determined by the platform from the chat
+Only an agent **admin** can call any of these reads or mutations.
+The caller's identity is determined by the platform from the chat
 context — you do NOT need to set any header or say who you are.
-If the platform replies `403`, the user is not an admin of this
-agent. Tell them plainly:
+If the platform replies `403`, the user is not an admin of the
+target agent. Tell them plainly:
 
-> You aren't an admin of this agent, so I can't change its access settings. The owner or another admin can promote you with the `promote-to-admin` flow.
+> You aren't an admin of that agent, so I can't read or change its access settings. The owner or another admin can promote you with the `promote-to-admin` flow.
 
 Do not retry. Do not pretend the call worked.
 

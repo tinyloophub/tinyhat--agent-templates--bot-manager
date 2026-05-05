@@ -22,13 +22,21 @@ parent monorepo gitlinks that point at it). Each release ships as a
 - `set-access-mode` "Identifying this agent on the URL" section
   spells out that the platform's resolver only accepts a numeric
   agent id or the canonical `<account-slug>/agents/<agent-name>`
-  handle — placeholders like `<self>` would 404 — and that the
-  bot-manager template uses `tinyhat/agents/bot-manager` literally
-  on every URL because it is the platform's `is_platform: true`
-  hat.
+  handle — placeholders like `<self>` would 404 — and that
+  `tinyhat/agents/bot-manager` is only used when the user explicitly
+  targets the platform bot-manager agent.
 
 ### Changed
 
+- `set-access-mode` now treats bot-manager as only one possible
+  target agent. It resolves the agent the user named and calls the
+  generic `/hapi/v1/agents/{ex_id_or_handle:path}/...` routes with
+  that agent's numeric id or canonical handle, rather than hard-
+  coding the platform bot-manager handle into every call.
+- `set-access-mode` now states the per-agent admin and target-user
+  scoping rules explicitly: the chatting user must be admin of the
+  target agent, and access-list mutations may only use user ids that
+  came from agent-scoped context.
 - Catalogue: dropped the `agents.set_access_mode` placeholder from
   the "Planned operations" list — it has been superseded by the
   five live access-mode + access-list operations.

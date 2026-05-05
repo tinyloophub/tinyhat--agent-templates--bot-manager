@@ -146,6 +146,77 @@ fast-forward summary.
 
 Fast-forward the agent's repo to upstream HEAD. No body.
 
+### Per-agent access mode + access-list
+
+These five operationIds replace the previously-planned
+`agents.set_access_mode`. They manage **two orthogonal axes** for an
+agent:
+
+- **Access mode** — the closed enum `restricted | account_members |
+  whitelist | public_with_blacklist` that decides who can chat
+  with the agent.
+- **Access list** — a flat set of `(user_id, kind, is_admin)` rows
+  where `kind` is `'allow'` (whitelist) or `'deny'` (blacklist) and
+  `is_admin` carries the per-agent admin tier (orthogonal to
+  `kind`; a user can be a chat-allowed admin, a chat-allowed
+  non-admin, or a denied non-admin — but never a denied admin).
+
+Every mutation requires the **caller** to be admin of the agent.
+The agent's primary owner is implicit admin; tinyloop superadmins
+are admin of every agent; anyone else needs an explicit
+`is_admin=true` access-list entry. The `set-access-mode` skill is
+the user-facing workflow that drives these operations.
+
+**`X-Tinyhat-Acting-User` is server-injected.** When a per-agent
+admin endpoint runs, the platform automatically attaches the
+`X-Tinyhat-Acting-User` header from the chat run context (the
+Telegram user the bot is processing a message for) before the
+`gated_api_call` reaches the upstream endpoint. The agent does NOT
+set this header from inside the sandbox — the gate strips
+caller-supplied auth headers, and the acting-user header lives in
+that same trusted-injection bucket. The per-agent admin check then
+runs against the resolved acting user, NOT against the agent's
+owner. So when alice DMs the bot-manager and asks to flip the
+access mode, the platform evaluates "is alice admin?" — not "is
+the bot-manager's owner admin?" — and refuses with 403 if she
+isn't.
+
+#### `agents.access-mode.get` — `GET /hapi/v1/agents/{ex_id_or_handle}/access-mode`
+
+Read the current access mode. Response:
+`{agent_id, agent_handle, mode, allowed_modes}`. The `allowed_modes`
+list is the closed enum a UI / skill can render as a dropdown
+without baking the spec into its prompt.
+
+#### `agents.access-mode.set` — `POST /hapi/v1/agents/{ex_id_or_handle}/access-mode`
+
+Set the agent's access mode. Body:
+`{"mode": "restricted" | "account_members" | "whitelist" | "public_with_blacklist"}`.
+Idempotent — the same mode twice returns the same state. 400 on
+unknown enum value, 403 when caller is not admin.
+
+#### `agents.access-list.get` — `GET /hapi/v1/agents/{ex_id_or_handle}/access-list`
+
+List every `(agent, user)` access-list row for the agent.
+Response:
+`{agent_id, agent_handle, entries: [{agent_id, user_id, kind, is_admin, added_by_user_id}, …]}`.
+Caller must be admin — the admin-tier flag is privileged metadata.
+
+#### `agents.access-list.entries.upsert` — `POST /hapi/v1/agents/{ex_id_or_handle}/access-list/entries`
+
+Add or update an `(agent, user)` row. Body:
+`{"user_id": <int>, "kind": "allow" | "deny", "is_admin": bool}`.
+Idempotent on `(agent_id, user_id)`. Refuses
+`{"kind": "deny", "is_admin": true}` with 409 (a denied user can't
+be admin). 404 when the target user_id doesn't exist. 403 when
+caller isn't admin.
+
+#### `agents.access-list.entries.delete` — `DELETE /hapi/v1/agents/{ex_id_or_handle}/access-list/entries/{user_id}`
+
+Remove an `(agent, user)` row. 404 when the row doesn't exist (the
+caller can present this to the user as "no entry to remove" rather
+than as an error).
+
 ### Handles & repos
 
 #### `handles.check` — `GET /hapi/v1/handles/check`
@@ -253,11 +324,13 @@ tell them so plainly.
 
 - `agents.get`, `agents.transfer`, `agents.suspend` — provisioning
   lifecycle (delete already shipped on hapi).
-- `agents.set_harness`, `agents.set_model`,
-  `agents.set_access_mode`, `agents.show_config` — per-agent
-  config. Note: `agents.set_credential` is **not** on this list
-  anymore — credentials are user-owned post-#209 and live under
-  `users.me.vaults.*` (above), not on the agent.
+- `agents.set_harness`, `agents.set_model`, `agents.show_config` —
+  per-agent config. Note: `agents.set_access_mode` graduated to
+  the live ops `agents.access-mode.{get,set}` +
+  `agents.access-list.{get,entries.upsert,entries.delete}` (above),
+  and `agents.set_credential` is **not** on this list anymore —
+  credentials are user-owned and live under `users.me.vaults.*`
+  (above), not on the agent.
 - `agents.list_models` — list models the platform currently
   supports for `agents.set_model`.
 - `channels.register`, `channels.list`, `channels.unregister` — bind
@@ -269,8 +342,10 @@ tell them so plainly.
   manifest edits.
 - `accounts.add_member`, `accounts.list_members` — multi-tenant
   membership.
-- `whitelist.grant`, `whitelist.revoke`, `whitelist.list_pending` —
-  invite-only access (issue #98).
+- `whitelist.list_pending` — outstanding invite requests (the
+  invite-prompted-by-canned-reply flow). The grant / revoke
+  primitives are now subsumed by
+  `agents.access-list.entries.upsert` / `.delete` (above).
 - `harnesses.versions.list` — pick a harness version per agent.
 - `evals.run`, `evals.compare_models` — evaluation runs.
 - `runs.list`, `runs.get`, `conversations.list`,

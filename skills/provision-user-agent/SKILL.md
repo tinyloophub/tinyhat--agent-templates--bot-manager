@@ -43,10 +43,36 @@ to the new agent's own `telegram` vault.
   Telegram, for example `Acme Support`.
 
 Do not reuse a Tinyhat kebab-case handle directly as a Telegram
-username. Ask for both when needed. Telegram's confirmation sheet is
-the source of truth for whether the global Telegram username is
-available; smarter candidate generation/retry is a separate
-follow-up.
+username. Pick a short Tinyhat handle for the account, then propose
+2-3 Telegram-safe username candidates in Telegram's global namespace.
+Telegram's confirmation sheet is the source of truth for whether a
+global username is available; you can make good suggestions, but you
+cannot prove availability before Telegram confirms.
+
+## Telegram username candidates
+
+When the user has not already supplied a Telegram username, generate
+2-3 candidates before asking them to choose. Derive them from the
+account slug and requested display name/purpose, not from the Tinyhat
+handle alone.
+
+Candidate recipe:
+
+1. Normalize the account slug and display words to lowercase ASCII.
+2. Replace spaces, hyphens, and punctuation with underscores.
+3. Keep only letters, digits, and underscores.
+4. Make sure the first character is a letter. If it is not, prefix the
+   account slug or `tinyhat`.
+5. Keep the full username between 5 and 32 characters.
+6. End every candidate with `bot` case-insensitively. Prefer readable
+   forms such as `acme_support_bot`, `acme_support_2026_bot`, or
+   `acmesupportbot`.
+7. Avoid double underscores and trim leading/trailing underscores.
+
+Ask the user to pick or edit one candidate before calling
+`propose_managed_bot_creation`. Keep the Tinyhat agent handle
+independent in the same prompt; for example, `acme/agents/support`
+can use Telegram username `acme_support_2026_bot`.
 
 ## Conversation pattern
 
@@ -54,9 +80,10 @@ follow-up.
    desired Tinyhat handle, Telegram display name, and Telegram
    username if present.
 2. **Ask for missing facts once.** Keep it concise. Example:
-   "I can do that. What Tinyhat account should own it, what easy
-   in-account handle do you want, and what Telegram username should
-   I propose? The Telegram username must end in `bot`; it can differ
+   "I can do that. What Tinyhat account should own it, and what easy
+   in-account handle should it use? For Telegram, pick or edit one:
+   `acme_support_bot`, `acme_support_2026_bot`, or
+   `acmesupportbot`. The Telegram username is global and can differ
    from the Tinyhat handle."
 3. **Reject import-existing-bot requests.** If the user wants to
    paste a token, import an existing third-party bot, or wire a bot
@@ -102,6 +129,12 @@ follow-up.
 
 - **Invalid Telegram username:** ask for a Telegram-safe username
   ending in `bot`. Explain that the Tinyhat handle can stay simpler.
+- **Telegram says the username is unavailable:** do not ask for a
+  BotFather token and do not claim availability yourself. Apologise
+  briefly, generate 2-3 fresh Telegram-safe candidates, ask the user
+  to pick or edit one, then call
+  `propose_managed_bot_creation(suggested_username, suggested_name)`
+  again after they confirm the new username.
 - **Bot Management Mode missing:** say the manager bot needs Telegram
   Bot Management Mode enabled once before Tinyhat can create managed
   bots. Stop; do not fall back to BotFather-token UX.

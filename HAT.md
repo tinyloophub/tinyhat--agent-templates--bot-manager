@@ -93,7 +93,9 @@ those skill bodies tell the user "not yet wired up" rather than
 inventing endpoints:
 
 - **provision-user-agent** — create a new user-owned Telegram agent
-  through Managed Bots. It proposes a
+  through Managed Bots. It keeps the account-scoped Tinyhat handle
+  separate from the globally unique Telegram username, suggests
+  Telegram-safe username candidates, proposes a
   `https://t.me/newbot/...` link with
   `propose_managed_bot_creation`, waits for Telegram's matched
   `managed_bot` confirmation, then calls `agents.create` with

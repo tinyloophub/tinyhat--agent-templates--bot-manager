@@ -10,17 +10,19 @@ parent monorepo gitlinks that point at it). Each release ships as a
 
 - `provision-user-agent` skill body now drives the Telegram Managed
   Bots zero-token flow: distinguish Tinyhat account/agent handles
-  from Telegram usernames, confirm the plan, call
-  `propose_managed_bot_creation`, send the `t.me/newbot` link,
-  wait for a matched `managed_bot` confirmation, then call
-  `agents.create(kind='user')` with `managed_bot_id` and without
-  `telegram_bot_token`.
+  from Telegram usernames, generate Telegram-safe username
+  candidates, confirm the plan, call `propose_managed_bot_creation`,
+  send the `t.me/newbot` link, retry with fresh candidates if
+  Telegram reports the username unavailable, wait for a matched
+  `managed_bot` confirmation, then call `agents.create(kind='user')`
+  with `managed_bot_id` and without `telegram_bot_token`.
 - `tinyhat-platform-api-reference` documents the
   `propose_managed_bot_creation` function tool, Telegram username
-  rules, matched-vs-unmatched managed-bot confirmations, user-agent
-  `agents.create` request shape, creator binding, persisted
-  non-secret bot metadata, and restricted creator-admin access
-  defaults.
+  rules, the fact that Telegram's confirmation sheet is authoritative
+  for global availability, matched-vs-unmatched managed-bot
+  confirmations, user-agent `agents.create` request shape, creator
+  binding, persisted non-secret bot metadata, and restricted
+  creator-admin access defaults.
 - `set-access-mode` skill body now drives the four canonical platform
   access modes (`restricted`, `account_members`, `whitelist`,
   `public_with_blacklist`) plus the per-agent admin tier through
@@ -74,7 +76,8 @@ parent monorepo gitlinks that point at it). Each release ships as a
   workflow, including creator-only initial access and later sharing
   through access-mode/access-list operations.
 - Smoke evals cover the zero-token Managed Bots create path and the
-  register-channel refusal for managed-bot agents.
+  unavailable-username retry path, plus the register-channel refusal
+  for managed-bot agents.
 - `tinyhat-platform-api-reference`, `sync-from-upstream`,
   `set-access-mode`, and `set-credential` skill bodies sharpen the
   "pass a relative `/hapi/v1/...` path" guidance into an explicit

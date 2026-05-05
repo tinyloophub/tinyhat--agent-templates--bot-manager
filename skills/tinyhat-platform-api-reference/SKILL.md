@@ -138,6 +138,13 @@ Telegram does not echo Tinyhat's correlation id back in the later
 `managed_bot` update, so the platform matches the callback by
 manager, creator, and suggested username.
 
+This tool does **not** prove the username is globally available on
+Telegram. It only validates the shape and prepares Telegram's
+new-bot sheet. If Telegram says the username is taken or unavailable,
+the user should pick another Telegram-safe username and you should
+call `propose_managed_bot_creation` again with the new suggestion.
+Do not ask for a BotFather token as a fallback.
+
 Matched callbacks are recorded as `status='confirmed'` with creator
 identity, managed bot id, managed bot username, and the raw Telegram
 confirmation payload. Unmatched callbacks are stored as

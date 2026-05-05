@@ -19,6 +19,16 @@ The platform endpoints this skill calls are documented in
 Every call here is a `gated_api_call` — there are no in-sandbox curls
 and you never see a token.
 
+> **Pass relative paths, never scheme + host.** Every URL in this
+> skill — the access-mode reads / writes and the access-list
+> reads / mutations — is a **path** that starts with `/hapi/v1/`.
+> Pass it verbatim to `gated_api_call(url=…)`. A leading
+> `https://api.tinyhat.dev/...` or any other host is always wrong;
+> the orchestrator resolves the platform host server-side. If a
+> call comes back `not_authorized`, the first thing to check is
+> that the `url=` argument starts with `/hapi/v1/` — do **not**
+> tell the user to widen the agent's outbound ACL.
+
 ## Access modes — the four-value closed enum
 
 The platform's access gate decides who can chat using these four
@@ -227,6 +237,23 @@ target agent. Tell them plainly:
 > You aren't an admin of that agent, so I can't read or change its access settings. The owner or another admin can promote you with the `promote-to-admin` flow.
 
 Do not retry. Do not pretend the call worked.
+
+### `not_authorized` (gated_api_call gate, NOT an upstream 403)
+
+This is a `gated_api_call` structured error — the request never
+left the platform because the gate refused it. The most common
+cause is an LLM-fabricated host on the `url` argument (e.g.
+`https://api.tinyhat.dev/hapi/v1/agents/...`). Do NOT diagnose
+this as "the user isn't an admin" or "the agent's ACL is too
+narrow"; the right fix is to drop the scheme + host and pass the
+relative `/hapi/v1/...` path. Re-issue the call with the
+corrected URL.
+
+If the `url=` already starts with `/hapi/v1/` and you still see
+`not_authorized`, surface the error verbatim and stop — that is a
+real ACL refusal at the platform gate (distinct from the per-agent
+admin 403 above), and it should not happen for the standard
+access-mode + access-list routes the bot-manager uses.
 
 ## Confirm-then-act is mandatory
 

@@ -75,6 +75,19 @@ The platform endpoints this skill calls are documented in
 Every call here is a `gated_api_call` — there are no in-sandbox curls
 and you never see a token.
 
+> **Pass relative paths, never scheme + host.** Both `gated_api_call`
+> URLs in this skill — the read at
+> `/hapi/v1/agents/tinyhat--agents--bot-manager/upstream/status`
+> and the mutation at
+> `/hapi/v1/agents/tinyhat--agents--bot-manager/upstream/sync` —
+> are **paths**, not URLs. Pass them verbatim to `gated_api_call(url=…)`.
+> A leading `https://api.tinyhat.dev/...` or any other host is
+> always wrong here; the orchestrator resolves the platform host
+> server-side. If a sync attempt comes back `not_authorized`, the
+> first thing to check is that the `url=` argument starts with
+> `/hapi/v1/` — do **not** tell the user to widen the agent's
+> outbound ACL.
+
 ## What "fast-forward" means
 
 The platform only ships **fast-forward** syncs: the agent's repo
@@ -277,6 +290,23 @@ see a 403 here it means the platform deployment ahead of you has
 tightened the gate (the per-agent admin gate finally landing).
 Surface the platform error verbatim and stop. Do not retry under
 a different identity.
+
+### `not_authorized` (gated_api_call gate, NOT an upstream 403)
+
+This is a `gated_api_call` structured error — the request never
+left the platform because the gate refused it. **The most common
+cause is an LLM-fabricated host on the `url` argument** (e.g.
+`https://api.tinyhat.dev/hapi/v1/...`). Do NOT diagnose this as
+"the agent's ACL is too narrow" and do NOT ask the user to widen
+the ACL — the right fix is to drop the scheme + host and pass the
+relative `/hapi/v1/...` path. Both calls in this skill use the
+literal handle `tinyhat--agents--bot-manager`; copy the URLs from
+the §"Calling pattern" sections verbatim.
+
+If the `url=` already starts with `/hapi/v1/` and you still see
+`not_authorized`, that is a real ACL refusal (rare for the
+upstream-sync routes — the bot-manager's vault Bearer is
+provisioned for both endpoints). Surface it and stop; do not retry.
 
 ### `upstream_unreachable` / `timeout`
 

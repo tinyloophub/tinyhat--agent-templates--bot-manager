@@ -34,6 +34,9 @@ skills:
   - name: set-access-mode
     source: local
     path: skills/set-access-mode
+  - name: sync-from-upstream
+    source: local
+    path: skills/sync-from-upstream
   - name: change-model
     source: local
     path: skills/change-model
@@ -97,6 +100,10 @@ inventing endpoints:
 - **set-access-mode** — manage the access mode (`restricted` /
   `account_members` / `whitelist` / `public_with_blacklist`) and
   the per-agent access list (allow / deny + admin tier). Live.
+- **sync-from-upstream** — fast-forward a target agent's repo to
+  the latest commit on its upstream template. Read status, mirror
+  the diff in plain language, ask for explicit confirmation, then
+  sync. Live.
 - **change-model** — swap the LLM an agent runs against.
 - **change-harness** — swap the runtime harness vendoring.
 - **set-credential** — store an API key / token in the vault.

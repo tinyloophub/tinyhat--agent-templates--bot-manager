@@ -30,6 +30,24 @@ parent monorepo gitlinks that point at it). Each release ships as a
   the target the user named first; `tinyhat/agents/bot-manager`
   is only used when the user explicitly targets the platform
   bot-manager agent.
+- `sync-from-upstream` skill body — chat-driven fast-forward of
+  **the bot-manager's own repo** to the latest commit on its
+  upstream template, via the live `agents.upstream.{status,sync}`
+  operationIds. Recognises "sync yourself", "upgrade", "update
+  from upstream", and "pick up the new version" as triggers (all
+  map onto the same fast-forward operation). Reads the status
+  delta first and branches on the response shape — no-upstream
+  wiring (`upstream_provider_repo` and `upstream_head_sha` both
+  null) is detected at read time and refused plainly without
+  burning a sync round-trip; upstream-unreadable
+  (`upstream_provider_repo` present but the head SHA null) prompts
+  the user to retry the read; the normal happy path mirrors the
+  diff in plain language using only the platform-returned fields
+  (no invented SKILL.md content), waits for an explicit yes, then
+  syncs and reports the new pinned commit. v0.1.0 is **bot-manager
+  self-sync only**; per-user-agent sync from chat is a follow-up
+  that depends on the platform-side per-agent admin gate for
+  `agents.upstream.{status,sync}` landing first.
 
 ### Changed
 

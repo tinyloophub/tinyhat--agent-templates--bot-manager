@@ -34,6 +34,9 @@ skills:
   - name: set-access-mode
     source: local
     path: skills/set-access-mode
+  - name: sync-from-upstream
+    source: local
+    path: skills/sync-from-upstream
   - name: change-model
     source: local
     path: skills/change-model
@@ -97,6 +100,16 @@ inventing endpoints:
 - **set-access-mode** — manage the access mode (`restricted` /
   `account_members` / `whitelist` / `public_with_blacklist`) and
   the per-agent access list (allow / deny + admin tier). Live.
+- **sync-from-upstream** — fast-forward the bot-manager's own
+  repo to the latest commit on its upstream template. Triggered
+  by "sync yourself", "upgrade", "update from upstream", or "pick
+  up the new version" intents (all the same fast-forward
+  operation). Read status, branch on the response shape (no-
+  upstream / upstream-unreadable / normal), mirror the diff in
+  plain language, ask for explicit confirmation, then sync. Live
+  for **bot-manager self-sync only** in v0.1.0; per-user-agent
+  sync from chat is a follow-up that depends on the platform
+  per-agent admin gate for the upstream-sync routes.
 - **change-model** — swap the LLM an agent runs against.
 - **change-harness** — swap the runtime harness vendoring.
 - **set-credential** — store an API key / token in the vault.

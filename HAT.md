@@ -85,8 +85,8 @@ Platform-API reference (cited by every workflow skill below):
 
 Workflow skills — each one is a short conversation pattern for one
 maintenance operation, citing operations by id from the reference
-above. Several depend on platform endpoints that haven't shipped
-yet; the skill bodies tell the user "not yet wired up" rather than
+above. Some depend on platform endpoints that haven't shipped yet;
+those skill bodies tell the user "not yet wired up" rather than
 inventing endpoints:
 
 - **provision-user-agent** — create a new agent for a user.
@@ -94,7 +94,9 @@ inventing endpoints:
 - **customize-soul** — edit a hat's identity prose.
 - **add-skill-from-repo** — mount an external skill on an agent.
 - **extract-skill** — publish an in-tree skill as its own repo.
-- **set-access-mode** — public / invite_only / private.
+- **set-access-mode** — manage the access mode (`restricted` /
+  `account_members` / `whitelist` / `public_with_blacklist`) and
+  the per-agent access list (allow / deny + admin tier). Live.
 - **change-model** — swap the LLM an agent runs against.
 - **change-harness** — swap the runtime harness vendoring.
 - **set-credential** — store an API key / token in the vault.

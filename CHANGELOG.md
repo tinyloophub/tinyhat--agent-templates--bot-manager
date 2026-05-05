@@ -19,6 +19,13 @@ parent monorepo gitlinks that point at it). Each release ships as a
   operationIds and notes that `X-Tinyhat-Acting-User` is
   server-injected by the platform's `gated_api_call` gate (the
   agent must NOT set the header from inside the sandbox).
+- `set-access-mode` "Identifying this agent on the URL" section
+  spells out that the platform's resolver only accepts a numeric
+  agent id or the canonical `<account-slug>/agents/<agent-name>`
+  handle — placeholders like `<self>` would 404 — and that the
+  bot-manager template uses `tinyhat/agents/bot-manager` literally
+  on every URL because it is the platform's `is_platform: true`
+  hat.
 
 ### Changed
 
@@ -28,6 +35,17 @@ parent monorepo gitlinks that point at it). Each release ships as a
 - Catalogue: dropped the `whitelist.grant` / `whitelist.revoke`
   placeholders — those primitives are now subsumed by
   `agents.access-list.entries.upsert` / `.delete`.
+- `HAT.md` workflow-skills summary: `set-access-mode` is now
+  described by the four canonical mode names + the access-list
+  + per-agent admin tier, not the old `public / invite_only /
+  private` legacy names. The "Several depend on platform endpoints
+  that haven't shipped yet" preamble is softened to "Some depend"
+  because `set-access-mode` is now live.
+- `show-config` skill body: agents.list `access_mode` summary now
+  cites the four canonical platform values and points the agent at
+  `agents.access-list.get` for "who's whitelisted / blacklisted /
+  admin" lookups, instead of the legacy `public / invite_only /
+  private` triple.
 
 ## 0.0.1
 

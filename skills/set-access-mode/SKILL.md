@@ -55,25 +55,37 @@ prod). You don't need to know who that is — `agents.access-mode.set`
 will simply succeed for them and fail with `403` for anyone else who
 isn't on the admin tier.
 
+## Identifying this agent on the URL
+
+Every endpoint below is path-parameterised on the **agent identifier**.
+The platform's resolver only accepts two shapes:
+
+- a numeric `tinyhat_agents.id`, or
+- the canonical handle `<account-slug>/agents/<agent-name>`.
+
+A literal placeholder string (e.g. `<self>`, `<this>`, `me`) will
+404. The bot-manager template is the platform's `is_platform: true`
+hat, so the running agent's canonical handle is **always**
+`tinyhat/agents/bot-manager` — use that literal handle on every
+URL in this skill. (If a future fork of this template runs as a
+non-platform agent, the fork's owner will replace `tinyhat/agents/bot-manager`
+with their fork's canonical handle when they update the skill body.)
+
 ## Calling pattern — read
 
 Use these for "who can talk to me right now?" / "show my settings"
 intents. Both endpoints are read-only and do not require
 confirmation:
 
-- `agents.access-mode.get` — `GET /hapi/v1/agents/<self>/access-mode`
+- `agents.access-mode.get` — `GET /hapi/v1/agents/tinyhat/agents/bot-manager/access-mode`
   returns `{agent_id, agent_handle, mode, allowed_modes}`. The
   `allowed_modes` list lets you offer the user a menu of valid
   next states without baking the enum into your prompt.
-- `agents.access-list.get` — `GET /hapi/v1/agents/<self>/access-list`
+- `agents.access-list.get` — `GET /hapi/v1/agents/tinyhat/agents/bot-manager/access-list`
   returns `{agent_id, agent_handle, entries: [{user_id, kind, is_admin,
   added_by_user_id}, …]}`. Use this for "who's on the whitelist?",
   "who can manage me?", or to verify a target user's current state
   before changing it.
-
-Use `<self>` literally — the bot-manager passes its own agent handle
-on the path because every flow this skill handles is "manage the
-agent the user is talking to right now."
 
 ## Calling pattern — set the access mode
 
@@ -97,7 +109,8 @@ private", "open to my account team":
    Wait for an explicit "yes". The mirror catches the "I meant
    `account_members`" slip, especially around `whitelist` vs
    `public_with_blacklist`.
-4. **Apply** with `agents.access-mode.set` — `POST /hapi/v1/agents/<self>/access-mode`,
+4. **Apply** with `agents.access-mode.set` —
+   `POST /hapi/v1/agents/tinyhat/agents/bot-manager/access-mode`,
    body `{"mode": "<one of the four>"}`. The endpoint is idempotent
    on the same value.
 5. **Report back.** Echo the new mode. If the user widened to
@@ -130,13 +143,14 @@ Steps for a mutation:
    whitelist (chat-allowed, NOT admin). Confirm?" or "I'll promote
    `alice` to admin (chat-allowed, can manage settings). Confirm?"
 3. **Apply** with `agents.access-list.entries.upsert` —
-   `POST /hapi/v1/agents/<self>/access-list/entries`, body
+   `POST /hapi/v1/agents/tinyhat/agents/bot-manager/access-list/entries`,
+   body
    `{"user_id": <id>, "kind": "allow"|"deny", "is_admin": false|true}`.
    Idempotent on `(agent_id, user_id)`; the same call twice returns
    the same row.
 4. **Removing** an entry uses
    `agents.access-list.entries.delete` —
-   `DELETE /hapi/v1/agents/<self>/access-list/entries/<user_id>`.
+   `DELETE /hapi/v1/agents/tinyhat/agents/bot-manager/access-list/entries/<user_id>`.
    404 means there was no entry to begin with; surface that as "no
    entry to remove" rather than as an error.
 5. **Report back.** Show the new row's shape (kind + admin) so the

@@ -6,6 +6,17 @@ parent monorepo gitlinks that point at it). Each release ships as a
 
 ## Unreleased
 
+_(Empty.)_
+
+## 0.0.1 — 2026-05-07
+
+First published cut. Establishes the per-repo `VERSION` + `CHANGELOG.md`
+convention so future skill changes ship under their own `v<x.y.z>` tags
+on this repo, independent of the parent monorepo's release cadence.
+Lands in lockstep with the tinyloop monorepo's `v0.1.0` cut, providing
+the chat-driven skill bodies for M0.1.0-B (mode toggle), M0.1.0-C
+(upstream sync), and M0.1.0-D (Managed Bots user-agent provisioning).
+
 ### Added
 
 - `provision-user-agent` skill body now drives the Telegram Managed
@@ -124,9 +135,3 @@ parent monorepo gitlinks that point at it). Each release ships as a
   admin" lookups, instead of the legacy `public / invite_only /
   private` triple.
 
-## 0.0.1
-
-Initial published cut of the bot-manager template content. Establishes
-the per-repo `VERSION` + `CHANGELOG.md` convention so future skill
-changes can ship under their own `v<x.y.z>` tags on this repo,
-independent of the parent monorepo's release cadence.

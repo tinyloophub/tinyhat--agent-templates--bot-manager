@@ -14,18 +14,11 @@ skills (so the conversation can chain naturally).
 ## What to surface
 
 The eventual rich endpoint is `agents.show_config` (planned).
-**Today, `agents.list` is the catch-all read** and its row carries:
+**Today only `agents.list` is shipped**, and its row only carries:
 
 - **Agent id and name**
 - **Owner** (account + primary user from the joined row)
-- **Access mode** — one of `restricted` / `account_members` /
-  `whitelist` / `public_with_blacklist`. Plain-language gloss when
-  reading to the user: "only you" / "your account members" / "you
-  plus the people you've added" / "anyone except the people you've
-  blocked". The full per-agent list of who's whitelisted /
-  blacklisted / admin lives behind `agents.access-list.get` — call
-  that one alongside `agents.list` when the user asks about a
-  specific person rather than the headline mode.
+- **Access mode** (`public` / `invite_only` / `private`)
 - **Model** (`model_provider` + `model_name`)
 - **Hat id** (so the user knows which hat is bound). The Telegram
   binding lives on `telegram_bot_username` / `telegram_bot_user_id`

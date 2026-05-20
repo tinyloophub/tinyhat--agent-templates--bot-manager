@@ -19,18 +19,6 @@ You also do not need a platform base URL or sandbox bearer token.
 For first-party Tinyhat calls, pass a relative `/hapi/v1/...` path;
 the backend function tool resolves the platform host server-side.
 
-> **Do NOT prepend a host.** `url="https://api.tinyhat.dev/..."` is
-> wrong. `url="https://api.tinyloop.co/..."` is wrong.
-> `url="https://<account>.tinyhat.dev/..."` is wrong.
-> `url="http://localhost:.../..."` is wrong. The orchestrator
-> resolves the platform host from server-known state — the agent
-> never sees it, names it, or sets it. Always pass a path that
-> starts with `/hapi/v1/`. **If you find yourself typing `http://`
-> or `https://` on a Tinyhat call, you've gone wrong** — back up
-> and write the relative path. A wrong host triggers
-> `not_authorized` because the host isn't in the agent's outbound
-> ACL; do not ask the user to widen the ACL — fix the URL.
-
 The only callable surface is **`/hapi/v1/`** (the agent-centric
 platform API shipped in #155 / W-REVISE). Do not call any other
 path prefix. If a capability you need isn't here yet, say so to
@@ -49,29 +37,11 @@ Every call goes through one tool, with one shape:
 ```text
 gated_api_call(
   method   = "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
-  url      = "/hapi/v1/<path>",   # MUST start with "/hapi/v1/" — never a scheme + host
-  json_body= { … } | null,        # only for POST / PATCH / PUT
-  query    = { … } | null,        # for GET filters or paging
+  url      = "/hapi/v1/<path>",
+  json_body= { … } | null,    # only for POST / PATCH / PUT
+  query    = { … } | null,    # for GET filters or paging
 )
 ```
-
-The `url` argument is a **path**, not a URL. It MUST start with
-`/hapi/v1/`. A leading `http://` or `https://` is always wrong on
-this tool — including any of these LLM-fabricated hosts:
-
-| Wrong (do NOT pass)                                         | Right (pass this instead) |
-|-------------------------------------------------------------|---------------------------|
-| `https://api.tinyhat.dev/hapi/v1/agents/<…>/upstream/status` | `/hapi/v1/agents/<…>/upstream/status` |
-| `https://api.tinyloop.co/hapi/v1/agents`                     | `/hapi/v1/agents` |
-| `https://<account>.tinyhat.dev/hapi/v1/...`                  | `/hapi/v1/...` |
-| `http://localhost:8000/hapi/v1/...`                          | `/hapi/v1/...` |
-
-If you put a scheme + host on the `url`, the orchestrator passes
-it through unchanged, the host won't be in this agent's outbound
-ACL, and the call refuses with `not_authorized`. The right
-response in that case is **fix the URL**, not ask the user to widen
-the ACL — the agent should never have been pointed at that host
-in the first place.
 
 Returns either an upstream response shape:
 
@@ -84,7 +54,7 @@ on which one you got):
 
 | Error code             | Meaning + how to react                                  |
 |------------------------|---------------------------------------------------------|
-| `not_authorized`       | Host or path is not in this agent's ACL. **First, check that you passed a relative `/hapi/v1/...` path** — a fabricated `https://api.tinyhat.dev/...` or `https://api.tinyloop.co/...` host is the most common cause and the right fix is to drop the scheme + host, NOT to ask the user to widen the ACL. If the URL is already a relative `/hapi/v1/...` path, then the action genuinely isn't permitted; tell the user and do not retry. |
+| `not_authorized`       | Host or path is not in this agent's ACL. Tell the user the action isn't permitted; do not retry. |
 | `credential_missing`   | Operator hasn't set the vault key yet. Tell the user the platform isn't bootstrapped for this action. |
 | `vault_unavailable`    | Infrastructure problem (key rotation, MAC mismatch). Apologise briefly and suggest retrying later. |
 | `rate_limited`         | Wait `retry_after_seconds` and try again, OR tell the user to retry shortly. |
@@ -102,126 +72,26 @@ auth, which it does not.
 Each operation below lives under `/hapi/v1/<path>`. Auth: Bearer
 header injected by the gate from the bot-manager's admin vault.
 
-### Bot-manager function tools
-
-These are not HTTP endpoints. They are backend-hosted function tools
-from the `bot-manager-20260427` toolkit. Use them directly when the
-workflow calls for them.
-
-#### `propose_managed_bot_creation(suggested_username, suggested_name)`
-
-Prepare a Telegram Managed Bots creation link for the chatting user.
-Inputs:
-
-- `suggested_username`: Telegram bot username to propose. It must be
-  5-32 letters/digits/underscores, start with a letter, and end with
-  `bot` case-insensitively.
-- `suggested_name`: Telegram display name.
-
-The tool validates the username shape, verifies the manager bot has
-Bot Management Mode (`can_manage_bots=true`), stores a pending
-correlation row, and returns:
-
-```json
-{
-  "correlation_id": "mbc_...",
-  "manager_bot_username": "tinyhatbot",
-  "suggested_username": "acme_support_2026_bot",
-  "suggested_name": "Acme Support",
-  "deep_link": "https://t.me/newbot/tinyhatbot/acme_support_2026_bot?name=Acme+Support"
-}
-```
-
-Send the returned `deep_link` to the user and tell them to keep the
-suggested username unchanged in Telegram's confirmation sheet.
-Telegram does not echo Tinyhat's correlation id back in the later
-`managed_bot` update, so the platform matches the callback by
-manager, creator, and suggested username.
-
-This tool does **not** prove the username is globally available on
-Telegram. It only validates the shape and prepares Telegram's
-new-bot sheet. If Telegram says the username is taken or unavailable,
-the user should pick another Telegram-safe username and you should
-call `propose_managed_bot_creation` again with the new suggestion.
-Do not ask for a BotFather token as a fallback.
-
-Matched callbacks are recorded as `status='confirmed'` with creator
-identity, managed bot id, managed bot username, and the raw Telegram
-confirmation payload. Unmatched callbacks are stored as
-`status='unmatched'` for audit/retry only; `agents.create(kind='user')`
-will not accept them.
-
 ### Agent lifecycle
 
 #### `agents.create` — `POST /hapi/v1/agents`
 
 Create an agent end-to-end (the **same** endpoint the maintainer
 uses from `/admin/that` to create the platform agent + every
-subsequent user agent).
-
-The credential shape depends on `kind`.
-
-System agent bootstrap (the platform's own bot-manager) uses the
-one-time BotFather token:
+subsequent user agent). Body shape:
 
 ```json
 {
   "channel": "telegram",
-  "account_handle": "tinyhat",
-  "kind": "system",
   "telegram_bot_token": "<BotFather token>",
+  "account_handle": "tinyloop",
+  "kind": "system" | "user",
+  "handle": "<optional kebab-case>",
   "owner_telegram_handle": "<optional Telegram @username>"
 }
 ```
 
-User-agent creation uses Telegram Managed Bots and **never** accepts
-`telegram_bot_token`:
-
-```json
-{
-  "channel": "telegram",
-  "account_handle": "acme",
-  "kind": "user",
-  "handle": "support",
-  "name": "Acme Support",
-  "managed_bot_id": "777001234"
-}
-```
-
-Rules for `kind='user'`:
-
-- `managed_bot_id` is required and must be Telegram's numeric
-  `ManagedBotUpdated.bot.id`.
-- A matched `tinyhat_managed_bot_creations.status='confirmed'` row
-  must exist for that managed bot id. `status='unmatched'` is not
-  enough; treat it as retry/operator-review state.
-- `telegram_bot_token` is forbidden. The backend calls
-  `getManagedBotToken` with the manager token, then writes the
-  fetched child token only to the new agent's own `telegram` vault.
-- Initial ownership comes from the Telegram user in the confirmed
-  `managed_bot` update. If `owner_telegram_handle` is supplied, it
-  is only an assertion and is rejected if it does not match the
-  confirmed creator.
-- `handle` is the Tinyhat in-account agent handle. It is separate
-  from the globally-unique Telegram bot username.
-
-The platform persists non-secret bot metadata with the provisioning
-state and agent row: Telegram bot id, username, webhook URL, and the
-derived `https://t.me/<username>` address. The raw Telegram
-confirmation payload is preserved on the managed-bot creation row.
-
-Response:
-`{"ex_id": "agt_…", "handle": …, "account_handle": …, "kind": …, "telegram_username": …, "webhook_url": …, "access_mode": …, "status": …}`.
-`Idempotency-Key` header dedupes retries against the provisioning
-state machine (#176 PR-B-1).
-
-New user agents start `access_mode='restricted'`,
-`primary_owner_user_id` set to the managed-bot creator, and an
-explicit access-list row for that creator:
-`{"kind": "allow", "is_admin": true}`. Only the creator can chat
-initially, and because they are admin they can later use
-`agents.access-mode.*` and `agents.access-list.*` to widen access or
-add more admins.
+Response: `{"ex_id": "agt_…", "handle": …, "account_handle": …, "kind": …, "telegram_username": …, "webhook_url": …, "access_mode": …, "status": …}`. `Idempotency-Key` header dedupes retries against the provisioning state machine (#176 PR-B-1).
 
 #### `agents.list.hapi` — `GET /hapi/v1/agents`
 
@@ -275,92 +145,6 @@ fast-forward summary.
 #### `agents.upstream.sync` — `POST /hapi/v1/agents/{ex_id_or_handle}/upstream/sync`
 
 Fast-forward the agent's repo to upstream HEAD. No body.
-
-### Per-agent access mode + access-list
-
-These five operationIds replace the previously-planned
-`agents.set_access_mode`. They are generic for **any** agent whose
-identifier resolves through `/hapi/v1/agents/{ex_id_or_handle:path}`;
-bot-manager is only the platform's own agent, not a special route
-shape. The identifier may be a numeric `tinyhat_agents.id`, the
-canonical handle (`tinyhat/agents/bot-manager`), or the slashless
-handle (`tinyhat--agents--bot-manager`). Prefer the slashless handle
-in HAPI URLs so canonical handles are not nested as path segments
-inside another `/agents/...` route. They manage **two orthogonal
-axes** for an agent:
-
-- **Access mode** — the closed enum `restricted | account_members |
-  whitelist | public_with_blacklist` that decides who can chat
-  with the agent.
-- **Access list** — a flat set of `(user_id, kind, is_admin)` rows
-  where `kind` is `'allow'` (whitelist) or `'deny'` (blacklist) and
-  `is_admin` carries the per-agent admin tier (orthogonal to
-  `kind`; a user can be a chat-allowed admin, a chat-allowed
-  non-admin, or a denied non-admin — but never a denied admin).
-
-Every mutation requires the **caller** to be admin of the agent.
-The agent's primary owner is implicit admin; tinyloop superadmins
-are admin of every agent; anyone else needs an explicit
-`is_admin=true` access-list entry. The `set-access-mode` skill is
-the user-facing workflow that drives these operations.
-
-Access-list mutations are also scoped to the target agent. The
-`user_id` in `agents.access-list.entries.upsert` and `.delete` is
-not a global-user escape hatch; the platform only accepts users who
-are already in the target agent's scope (for example the owner, an
-account member, someone who has talked to that agent, or an
-existing row on that agent's access list).
-
-**`X-Tinyhat-Acting-User` is server-injected.** When a per-agent
-admin endpoint runs, the platform automatically attaches the
-`X-Tinyhat-Acting-User` header from the chat run context (the
-Telegram user the bot is processing a message for) before the
-`gated_api_call` reaches the upstream endpoint. The agent does NOT
-set this header from inside the sandbox — the gate strips
-caller-supplied auth headers, and the acting-user header lives in
-that same trusted-injection bucket. The per-agent admin check then
-runs against the resolved acting user, NOT against the agent's
-owner. So when alice DMs the bot-manager and asks to flip the
-access mode, the platform evaluates "is alice admin?" — not "is
-the bot-manager's owner admin?" — and refuses with 403 if she
-isn't.
-
-#### `agents.access-mode.get` — `GET /hapi/v1/agents/{ex_id_or_handle}/access-mode`
-
-Read the current access mode. Response:
-`{agent_id, agent_handle, mode, allowed_modes}`. The `allowed_modes`
-list is the closed enum a UI / skill can render as a dropdown
-without baking the spec into its prompt.
-
-#### `agents.access-mode.set` — `POST /hapi/v1/agents/{ex_id_or_handle}/access-mode`
-
-Set the agent's access mode. Body:
-`{"mode": "restricted" | "account_members" | "whitelist" | "public_with_blacklist"}`.
-Idempotent — the same mode twice returns the same state. 400 on
-unknown enum value, 403 when caller is not admin.
-
-#### `agents.access-list.get` — `GET /hapi/v1/agents/{ex_id_or_handle}/access-list`
-
-List every `(agent, user)` access-list row for the agent.
-Response:
-`{agent_id, agent_handle, entries: [{agent_id, user_id, kind, is_admin, added_by_user_id}, …]}`.
-Caller must be admin — the admin-tier flag is privileged metadata.
-
-#### `agents.access-list.entries.upsert` — `POST /hapi/v1/agents/{ex_id_or_handle}/access-list/entries`
-
-Add or update an `(agent, user)` row. Body:
-`{"user_id": <int>, "kind": "allow" | "deny", "is_admin": bool}`.
-Idempotent on `(agent_id, user_id)`. Refuses
-`{"kind": "deny", "is_admin": true}` with 409 (a denied user can't
-be admin). 404 when the target user_id doesn't exist. 403 when
-caller isn't admin. 404 when the target user exists globally but is
-outside this agent's scope.
-
-#### `agents.access-list.entries.delete` — `DELETE /hapi/v1/agents/{ex_id_or_handle}/access-list/entries/{user_id}`
-
-Remove an `(agent, user)` row. 404 when the row doesn't exist (the
-caller can present this to the user as "no entry to remove" rather
-than as an error).
 
 ### Handles & repos
 
@@ -469,13 +253,11 @@ tell them so plainly.
 
 - `agents.get`, `agents.transfer`, `agents.suspend` — provisioning
   lifecycle (delete already shipped on hapi).
-- `agents.set_harness`, `agents.set_model`, `agents.show_config` —
-  per-agent config. Note: `agents.set_access_mode` graduated to
-  the live ops `agents.access-mode.{get,set}` +
-  `agents.access-list.{get,entries.upsert,entries.delete}` (above),
-  and `agents.set_credential` is **not** on this list anymore —
-  credentials are user-owned and live under `users.me.vaults.*`
-  (above), not on the agent.
+- `agents.set_harness`, `agents.set_model`,
+  `agents.set_access_mode`, `agents.show_config` — per-agent
+  config. Note: `agents.set_credential` is **not** on this list
+  anymore — credentials are user-owned post-#209 and live under
+  `users.me.vaults.*` (above), not on the agent.
 - `agents.list_models` — list models the platform currently
   supports for `agents.set_model`.
 - `channels.register`, `channels.list`, `channels.unregister` — bind
@@ -487,10 +269,8 @@ tell them so plainly.
   manifest edits.
 - `accounts.add_member`, `accounts.list_members` — multi-tenant
   membership.
-- `whitelist.list_pending` — outstanding invite requests (the
-  invite-prompted-by-canned-reply flow). The grant / revoke
-  primitives are now subsumed by
-  `agents.access-list.entries.upsert` / `.delete` (above).
+- `whitelist.grant`, `whitelist.revoke`, `whitelist.list_pending` —
+  invite-only access (issue #98).
 - `harnesses.versions.list` — pick a harness version per agent.
 - `evals.run`, `evals.compare_models` — evaluation runs.
 - `runs.list`, `runs.get`, `conversations.list`,

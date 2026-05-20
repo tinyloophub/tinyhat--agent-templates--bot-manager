@@ -34,9 +34,6 @@ skills:
   - name: set-access-mode
     source: local
     path: skills/set-access-mode
-  - name: sync-from-upstream
-    source: local
-    path: skills/sync-from-upstream
   - name: change-model
     source: local
     path: skills/change-model
@@ -88,41 +85,16 @@ Platform-API reference (cited by every workflow skill below):
 
 Workflow skills — each one is a short conversation pattern for one
 maintenance operation, citing operations by id from the reference
-above. Some depend on platform endpoints that haven't shipped yet;
-those skill bodies tell the user "not yet wired up" rather than
+above. Several depend on platform endpoints that haven't shipped
+yet; the skill bodies tell the user "not yet wired up" rather than
 inventing endpoints:
 
-- **provision-user-agent** — create a new user-owned Telegram agent
-  through Managed Bots. It keeps the account-scoped Tinyhat handle
-  separate from the globally unique Telegram username, suggests
-  Telegram-safe username candidates, proposes a
-  `https://t.me/newbot/...` link with
-  `propose_managed_bot_creation`, waits for Telegram's matched
-  `managed_bot` confirmation, then calls `agents.create` with
-  `kind='user'` + `managed_bot_id` (never a user-visible token).
-  Created agents start restricted with the creator as explicit
-  allow/admin; sharing later uses the access-mode + access-list
-  operations below.
-- **register-telegram-channel** — future import-existing-bot
-  escape hatch only. Managed Bots agents from
-  `provision-user-agent` are bound automatically during
-  `agents.create`.
+- **provision-user-agent** — create a new agent for a user.
+- **register-telegram-channel** — bind a Telegram bot to an agent.
 - **customize-soul** — edit a hat's identity prose.
 - **add-skill-from-repo** — mount an external skill on an agent.
 - **extract-skill** — publish an in-tree skill as its own repo.
-- **set-access-mode** — manage the access mode (`restricted` /
-  `account_members` / `whitelist` / `public_with_blacklist`) and
-  the per-agent access list (allow / deny + admin tier). Live.
-- **sync-from-upstream** — fast-forward the bot-manager's own
-  repo to the latest commit on its upstream template. Triggered
-  by "sync yourself", "upgrade", "update from upstream", or "pick
-  up the new version" intents (all the same fast-forward
-  operation). Read status, branch on the response shape (no-
-  upstream / upstream-unreadable / normal), mirror the diff in
-  plain language, ask for explicit confirmation, then sync. Live
-  for **bot-manager self-sync only** in v0.1.0; per-user-agent
-  sync from chat is a follow-up that depends on the platform
-  per-agent admin gate for the upstream-sync routes.
+- **set-access-mode** — public / invite_only / private.
 - **change-model** — swap the LLM an agent runs against.
 - **change-harness** — swap the runtime harness vendoring.
 - **set-credential** — store an API key / token in the vault.
@@ -138,14 +110,6 @@ Function tools (from `bot-manager-20260427`):
   v0 `read-older-history` SKILL.md (same broken-proxy failure
   mode). Reads directly from `tinyhat_messages` in our backend; no
   sandbox network involved.
-- **`propose_managed_bot_creation(suggested_username, suggested_name)`**
-  — create a pending Telegram Managed Bots proposal for the
-  chatting user and return the `https://t.me/newbot/...` deep link.
-  The tool validates Telegram username shape (including the `bot`
-  suffix), verifies the manager bot can manage bots, and never
-  returns or exposes a bot token. The later Telegram `managed_bot`
-  callback is recorded by the platform and is what unlocks
-  `agents.create(kind='user')`.
 
 Function tools (from `outbound-20260427` — [issue #101](https://github.com/tinyloophub/tinyloop/issues/101)):
 

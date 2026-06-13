@@ -51,9 +51,11 @@ marker flags the same.
 Before treating a release as done, inspect its marker payload:
 
 ```bash
-gh release view "$TAG" \
+gh release list \
   --repo tinyloophub/tinyhat--agent-templates--bot-manager \
-  --json tagName,name,isPrerelease,isLatest,isDraft
+  --limit 500 \
+  --json tagName,name,isPrerelease,isLatest,isDraft \
+  --jq "map(select(.tagName == \"$TAG\")) | .[0]"
 ```
 
 Expected:

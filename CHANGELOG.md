@@ -8,6 +8,22 @@ parent monorepo gitlinks that point at it). Each release ships as a
 
 _(Empty.)_
 
+## 0.1.0 — 2026-06-16
+
+Refreshes the public bot-manager system-agent payload and adds the release
+marker runbook used by this repository's independent release cadence.
+
+### Changed
+
+- Reworked the bot-manager HAT, smoke evals, and core platform skills around
+  the current managed-bot and admin-tool contract, reducing stale guidance and
+  keeping the system agent focused on the supported Tinyhat flows.
+
+### Added
+
+- `RELEASING.md` documents the public tag/title/pre-release/latest marker
+  contract for future bot-manager template releases.
+
 ## 0.0.1 — 2026-05-07
 
 First published cut. Establishes the per-repo `VERSION` + `CHANGELOG.md`
@@ -134,4 +150,3 @@ the chat-driven skill bodies for M0.1.0-B (mode toggle), M0.1.0-C
   `agents.access-list.get` for "who's whitelisted / blacklisted /
   admin" lookups, instead of the legacy `public / invite_only /
   private` triple.
-

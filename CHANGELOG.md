@@ -8,6 +8,17 @@ parent monorepo gitlinks that point at it). Each release ships as a
 
 _(Empty.)_
 
+## 0.0.2 — 2026-09-07
+
+Publish the template content already present on main so consumers can pin a
+released artifact instead of an untagged commit. This cut changes release
+metadata only relative to the existing main payload.
+
+- Reconcile the populated HAT, platform API reference, provisioning, channel,
+  access-mode and credential skills with their smoke cases.
+- Include the public release naming and marker runbook.
+
+
 ## 0.0.1 — 2026-05-07
 
 First published cut. Establishes the per-repo `VERSION` + `CHANGELOG.md`
